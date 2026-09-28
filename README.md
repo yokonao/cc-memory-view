@@ -37,7 +37,6 @@ Lists audit candidates, found by rules without judging content:
 | `index_missing`  | `MEMORY.md` links to a file that doesn't exist                   |
 | `unindexed`      | a memory file isn't listed in `MEMORY.md`                        |
 | `broken_link`    | a `[[name]]` link matches no memory in the project               |
-| `missing_path`   | a path in a code span doesn't exist (relative to the project)    |
 | `stale`          | not modified for `--stale-days` days (default 90)                |
 
 Deciding what to keep, merge, promote to `CLAUDE.md` or delete is left to

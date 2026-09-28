@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Removed
+
+- `check` no longer reports `missing_path`; path detection in code spans was too noisy to be useful.
+
 ## v0.0.1 - 2026-09-28
 
 ### Added

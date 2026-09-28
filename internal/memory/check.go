@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
-	"strings"
 	"time"
 )
 
@@ -16,7 +15,6 @@ const (
 	KindUnindexed     = "unindexed"
 	KindIndexMissing  = "index_missing"
 	KindBrokenLink    = "broken_link"
-	KindMissingPath   = "missing_path"
 	KindStale         = "stale"
 )
 
@@ -75,11 +73,6 @@ func checkProject(p *Project, now time.Time, staleAfter time.Duration) []Issue {
 				add(KindBrokenLink, m.File, "[[%s]] matches no memory", name)
 			}
 		}
-		for _, path := range Paths(m.Body) {
-			if abs := resolve(path, p.Path); abs != "" && !exists(abs) {
-				add(KindMissingPath, m.File, "%s does not exist", path)
-			}
-		}
 		if age := now.Sub(m.Modified); age > staleAfter {
 			add(KindStale, m.File, "not modified for %d days", int(age.Hours()/24))
 		}
@@ -96,40 +89,6 @@ func Links(body string) []string {
 		names = append(names, m[1])
 	}
 	return names
-}
-
-var codeSpanRe = regexp.MustCompile("`([^`\\s]+)`")
-
-// Paths returns the code spans that look like file paths.
-func Paths(body string) []string {
-	var paths []string
-	for _, m := range codeSpanRe.FindAllStringSubmatch(body, -1) {
-		s := m[1]
-		if !strings.Contains(s, "/") || strings.Contains(s, "://") || strings.ContainsAny(s, "<>*{}$@:") {
-			continue
-		}
-		paths = append(paths, s)
-	}
-	return paths
-}
-
-// resolve makes path absolute, relative to the project for relative paths.
-// It returns "" when a relative path can't be resolved.
-func resolve(path, project string) string {
-	if rest, ok := strings.CutPrefix(path, "~/"); ok {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return ""
-		}
-		return filepath.Join(home, rest)
-	}
-	if filepath.IsAbs(path) {
-		return path
-	}
-	if project == "" {
-		return ""
-	}
-	return filepath.Join(project, path)
 }
 
 func exists(path string) bool {
