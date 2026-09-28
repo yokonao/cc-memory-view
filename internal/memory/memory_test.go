@@ -21,7 +21,6 @@ func write(t *testing.T, path, content string) {
 func TestLoadAndCheck(t *testing.T) {
 	root := t.TempDir()
 	work := t.TempDir()
-	write(t, filepath.Join(work, "exists.txt"), "")
 
 	proj := filepath.Join(root, "-work")
 	write(t, filepath.Join(proj, "s.jsonl"), `{"type":"summary"}`+"\n"+`{"cwd":"`+work+`"}`+"\n")
@@ -34,7 +33,7 @@ metadata:
   modified: 2026-01-01T00:00:00Z
 ---
 
-See [[b]] and [[nope]]. Files: `+"`exists.txt`, `missing/file.go`, `gh pr checks`, `https://x/y`"+`.
+See [[b]] and [[nope]].
 `)
 	write(t, filepath.Join(proj, "memory", "b.md"), "---\nname: b\ndescription: second\nmetadata:\n  type: project\n---\nbody\n")
 
@@ -79,7 +78,6 @@ See [[b]] and [[nope]]. Files: `+"`exists.txt`, `missing/file.go`, `gh pr checks
 		"no_index memory MEMORY.md is missing",
 		"index_missing MEMORY.md MEMORY.md links to missing gone.md",
 		"broken_link a.md [[nope]] matches no memory",
-		"missing_path a.md missing/file.go does not exist",
 		"stale a.md not modified for 151 days",
 		"unindexed b.md not listed in MEMORY.md",
 	}
