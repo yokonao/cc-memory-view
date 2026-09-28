@@ -56,7 +56,7 @@ with `claude attach <id>`. Only same-origin requests to a loopback or
 
 The session talks to the web UI through `cc-memory-view audit update` and
 `audit watch`. It starts with those commands, `rm` and read-only `gh`
-commands allowed, `--permission-mode acceptEdits` and the Claude config
+commands allowed, `--permission-mode auto` and the Claude config
 directory added, so it runs without permission prompts. `claude --bg`
 requires the project directory to be trusted, which it is once you've
 accepted the trust prompt there.

@@ -52,7 +52,7 @@ func TestStart(t *testing.T) {
 	for _, want := range []string{
 		"`/bin/cc-memory-view audit watch aaaabbbbccccdddd`",
 		"auto memory in /cfg/projects/-p/memory with me",
-		"--permission-mode\nacceptEdits\n--add-dir\n/cfg\n--allowedTools\nRead,Glob,Grep,Monitor,Bash(/bin/cc-memory-view audit:*),Bash(rm:*),Bash(gh issue view:*),Bash(gh issue list:*),Bash(gh pr view:*),Bash(gh pr list:*),Bash(gh search:*)\n",
+		"--permission-mode\nauto\n--add-dir\n/cfg\n--allowedTools\nRead,Glob,Grep,Monitor,Bash(/bin/cc-memory-view audit:*),Bash(rm:*),Bash(gh issue view:*),Bash(gh issue list:*),Bash(gh pr view:*),Bash(gh pr list:*),Bash(gh search:*)\n",
 	} {
 		if !strings.Contains(args, want) {
 			t.Errorf("claude args lack %q:\n%s", want, args)
