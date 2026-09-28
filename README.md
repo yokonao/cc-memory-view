@@ -47,10 +47,19 @@ Claude Code. For example:
 Run `cc-memory-view check --json` and audit my memory with me.
 ```
 
-**Audit with Claude Code** in the web UI does this for you: it starts
-`claude --bg` with a fixed audit prompt and shows the `claude attach <id>`
-command to continue the session. Only same-origin requests to a loopback or
-`*.localhost` host can start it.
+**Audit with Claude Code** in the web UI does this for you: it starts a
+`claude --bg` session with a fixed audit prompt. Claude posts its suggestions
+to the web UI, where you accept, reject or comment on each one and reply; the
+session receives your replies through a `Monitor` and applies only what you
+accepted. You can also continue it in a terminal with `claude attach <id>`.
+Only same-origin requests to a loopback or `*.localhost` host can start or
+reply to it.
+
+The session talks to the web UI through `cc-memory-view audit post`, `audit
+watch` and `audit rm` (which deletes only memory files other than
+`MEMORY.md`). It starts with those commands allowed, `--permission-mode
+acceptEdits` and the Claude config directory added, so it runs without
+permission prompts.
 
 The session runs in a dedicated workspace,
 `$XDG_DATA_HOME/cc-memory-view` (`~/.local/share/cc-memory-view` by default),
