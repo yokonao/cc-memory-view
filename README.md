@@ -61,7 +61,8 @@ cc-memory-view setup
 ```
 
 This creates the directory and starts `claude` there; accept the trust prompt,
-then type `/exit`.
+then type `/exit`. Once Claude Code has recorded the workspace as trusted,
+`setup` skips starting it.
 
 The project directory is taken from the `cwd` recorded in its session logs.
 `$CLAUDE_CONFIG_DIR` is honored in place of `~/.claude`.

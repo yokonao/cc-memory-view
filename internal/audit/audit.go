@@ -4,6 +4,7 @@ package audit
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -37,11 +38,42 @@ func Setup(dir string) error {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
+	if trusted(dir) {
+		fmt.Printf("%s is already set up.\n", dir)
+		return nil
+	}
 	fmt.Printf("Starting claude in %s.\nAccept the trust prompt if asked, then type /exit.\n\n", dir)
 	cmd := exec.Command("claude")
 	cmd.Dir = dir
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
 	return cmd.Run()
+}
+
+// trusted reports whether Claude Code recorded dir as a trusted workspace in
+// its global config ($CLAUDE_CONFIG_DIR/.claude.json or ~/.claude.json). It
+// only reads the file, and any doubt counts as untrusted.
+func trusted(dir string) bool {
+	path := filepath.Join(os.Getenv("CLAUDE_CONFIG_DIR"), ".claude.json")
+	if os.Getenv("CLAUDE_CONFIG_DIR") == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return false
+		}
+		path = filepath.Join(home, ".claude.json")
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return false
+	}
+	var cfg struct {
+		Projects map[string]struct {
+			HasTrustDialogAccepted bool `json:"hasTrustDialogAccepted"`
+		} `json:"projects"`
+	}
+	if json.Unmarshal(data, &cfg) != nil {
+		return false
+	}
+	return cfg.Projects[dir].HasTrustDialogAccepted
 }
 
 type Params struct {
