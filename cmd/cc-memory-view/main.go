@@ -1,16 +1,19 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"runtime"
+	"syscall"
 	"text/tabwriter"
 	"time"
 
@@ -63,7 +66,7 @@ func staleFlag(fs *flag.FlagSet) *int {
 
 func serve(args []string) error {
 	fs := flag.NewFlagSet("serve", flag.ExitOnError)
-	addr := fs.String("addr", "127.0.0.1:0", "listen address")
+	addr := fs.String("addr", "127.0.0.1:0", "listen address: host:port or unix:///absolute/path")
 	noOpen := fs.Bool("no-open", false, "don't open the browser")
 	staleDays := staleFlag(fs)
 	_ = fs.Parse(args)
@@ -72,19 +75,34 @@ func serve(args []string) error {
 	if err != nil {
 		return err
 	}
-	ln, err := net.Listen("tcp", *addr)
+	ln, err := listen(*addr)
 	if err != nil {
 		return err
 	}
-	url := "http://" + ln.Addr().String() + "/"
-	fmt.Println("Serving on", url)
-	if !*noOpen {
-		if err := openBrowser(url); err != nil {
-			fmt.Fprintln(os.Stderr, "open browser:", err)
+	if ln.Addr().Network() == "unix" {
+		fmt.Println("Serving on unix://" + ln.Addr().String())
+	} else {
+		url := "http://" + ln.Addr().String() + "/"
+		fmt.Println("Serving on", url)
+		if !*noOpen {
+			if err := openBrowser(url); err != nil {
+				fmt.Fprintln(os.Stderr, "open browser:", err)
+			}
 		}
 	}
-	s := &web.Server{Root: root, StaleAfter: days(*staleDays)}
-	return http.Serve(ln, s.Handler())
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	srv := &http.Server{Handler: (&web.Server{Root: root, StaleAfter: days(*staleDays)}).Handler()}
+	go func() {
+		<-ctx.Done()
+		// Closing the listener also removes the Unix socket.
+		_ = srv.Close()
+	}()
+	if err := srv.Serve(ln); !errors.Is(err, http.ErrServerClosed) {
+		return err
+	}
+	return nil
 }
 
 func openBrowser(url string) error {

@@ -6,3 +6,4 @@
 
 - `serve` browses memory across projects in the browser.
 - `check` lists audit candidates, as text or JSON.
+- `serve --addr unix:///path.sock` listens on a Unix socket.
