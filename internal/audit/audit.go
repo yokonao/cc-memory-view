@@ -91,7 +91,7 @@ type Params struct {
 // Prompt is the fixed instruction the session starts with.
 func Prompt(p Params) string {
 	cmd := func(args string) string { return "`" + p.Exe + " " + args + "`" }
-	return fmt.Sprintf(`Audit my Claude Code auto memory with me. I follow along and reply in the cc-memory-view web UI, which talks to you only through these pre-approved commands:
+	return fmt.Sprintf(`Audit my Claude Code auto memory with me. I follow along and reply in the cc-memory-view web UI, which talks to you only through these pre-approved commands. Run each of them as its own Bash call, never combined with other commands (no ;, &&, pipes or loops), or it will wait for a permission prompt nobody sees. Read memory files with the Read, Glob and Grep tools, not the shell.
 
 - %[1]s: rule-based candidates (orphaned projects, MEMORY.md inconsistencies, broken [[links]], missing paths, stale memories).
 - %[2]s: publish your state to the web UI. Pass JSON on stdin (e.g. a quoted heredoc):
@@ -101,7 +101,7 @@ func Prompt(p Params) string {
 - %[4]s: delete a memory file, only after I accepted deleting it.
 
 Steps:
-1. Run the check, read every memory file under %[5]s, and post your suggestions with status "waiting". Suggest promoting to %[6]s when the same rule appears in several projects.
+1. Run the check, read every memory file under %[5]s with Glob and Read, and post your suggestions with status "waiting". Suggest promoting to %[6]s when the same rule appears in several projects.
 2. Start the Monitor tool with %[3]s as its command and the longest timeout it allows. Its events are my replies. Whenever it expires before you post status "done", start it again: it resumes where it left off, so no reply is repeated or lost.
 3. Don't change any file until a reply accepts it. On each reply, post status "working", apply the accepted suggestions (taking comments into account, and keeping each project's MEMORY.md in sync), then post the full list again with statuses updated and status "waiting", or "done" when I say we're finished.`,
 		cmd(fmt.Sprintf("check --json --stale-days %d", p.StaleDays)),
