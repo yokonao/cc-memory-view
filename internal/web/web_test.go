@@ -80,7 +80,7 @@ func TestAuditFlow(t *testing.T) {
 	}
 
 	state := `{"status": "waiting", "message": "**Hello**", "suggestions": [{"id": "s1", "action": "delete", "files": ["/cfg/projects/-p/memory/a.md", "/elsewhere.md"], "reason": "old"}]}`
-	if err := s.Audits.Post(started.Token, strings.NewReader(state)); err != nil {
+	if err := s.Audits.Update(started.Token, strings.NewReader(state)); err != nil {
 		t.Fatal(err)
 	}
 	rec = do(h, http.MethodGet, path, "localhost", "", "")
@@ -97,10 +97,10 @@ func TestAuditFlow(t *testing.T) {
 	if rec := do(h, http.MethodPost, path+"/reply", "localhost", "cross-site", `{"message": "hi"}`); rec.Code != http.StatusForbidden {
 		t.Errorf("cross-site reply: %d", rec.Code)
 	}
-	if rec := do(h, http.MethodPost, path+"/reply", "localhost", "same-origin", `{"decisions": [{"id": "s1", "decision": "accept"}]}`); rec.Code != http.StatusNoContent {
+	if rec := do(h, http.MethodPost, path+"/reply", "localhost", "same-origin", `{"decisions": [{"id": "s1", "decision": "approve"}]}`); rec.Code != http.StatusNoContent {
 		t.Errorf("reply: %d %s", rec.Code, rec.Body)
 	}
-	if rec := do(h, http.MethodGet, path, "localhost", "", ""); !strings.Contains(rec.Body.String(), `"decision":"accept"`) {
+	if rec := do(h, http.MethodGet, path, "localhost", "", ""); !strings.Contains(rec.Body.String(), `"decision":"approve"`) {
 		t.Errorf("reply not recorded: %s", rec.Body)
 	}
 	if rec := do(h, http.MethodGet, "/api/audits/0000000000000000", "localhost", "", ""); rec.Code != http.StatusNotFound {

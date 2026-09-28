@@ -10,13 +10,11 @@ import (
 	"time"
 
 	"github.com/yokonao/cc-memory-view/internal/audit"
-	"github.com/yokonao/cc-memory-view/internal/memory"
 )
 
 const auditUsage = `Usage (run by the audit session):
-  cc-memory-view audit post <token>        publish the state JSON on stdin
-  cc-memory-view audit watch <token>       print replies from the web UI
-  cc-memory-view audit rm <token> <file>   delete an accepted memory file
+  cc-memory-view audit update <token>   merge the state JSON on stdin
+  cc-memory-view audit watch <token>    print replies from the web UI
 `
 
 func auditStore() (audit.Store, error) {
@@ -28,7 +26,7 @@ func auditStore() (audit.Store, error) {
 }
 
 func auditCmd(args []string) error {
-	if len(args) < 2 || args[0] == "rm" && len(args) != 3 || args[0] != "rm" && len(args) != 2 {
+	if len(args) != 2 {
 		fmt.Fprint(os.Stderr, auditUsage)
 		os.Exit(2)
 	}
@@ -38,29 +36,16 @@ func auditCmd(args []string) error {
 	}
 	token := args[1]
 	switch args[0] {
-	case "post":
-		if err := store.Post(token, os.Stdin); err != nil {
+	case "update":
+		if err := store.Update(token, os.Stdin); err != nil {
 			return err
 		}
-		fmt.Println("Posted to the web UI.")
+		fmt.Println("Updated the web UI.")
 		return nil
 	case "watch":
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 		defer stop()
 		return store.Watch(ctx, token, os.Stdout, time.Second)
-	case "rm":
-		if _, err := store.Load(token); err != nil {
-			return err
-		}
-		configDir, err := memory.ConfigDir()
-		if err != nil {
-			return err
-		}
-		if err := audit.Remove(configDir, args[2]); err != nil {
-			return err
-		}
-		fmt.Println("Removed", args[2])
-		return nil
 	}
 	fmt.Fprint(os.Stderr, auditUsage)
 	os.Exit(2)

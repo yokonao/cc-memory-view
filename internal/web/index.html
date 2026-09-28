@@ -181,8 +181,7 @@
   .proposed { margin-top: 12px; padding: 12px 16px; border-left: 3px solid var(--accent); background: var(--surface-2); border-radius: 8px; }
   .proposed .label { display: block; margin-bottom: 4px; }
   .choices { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 14px; }
-  .choice.active.accept { background: var(--accent); border-color: var(--accent); color: #fff; }
-  .choice.active.reject { background: var(--ink); border-color: var(--ink); color: var(--bg); }
+  .choice.active { background: var(--accent); border-color: var(--accent); color: #fff; }
   .choices input { flex: 1; min-width: 180px; padding: 6px 10px; border: 1px solid var(--border-strong); border-radius: 8px; background: var(--surface); color: var(--ink); font: 0.9rem var(--sans); }
   textarea { width: 100%; min-height: 90px; padding: 10px 14px; border: 1px solid var(--border-strong); border-radius: 10px; background: var(--surface); color: var(--ink); font: 0.95rem/1.6 var(--sans); resize: vertical; }
   textarea:focus, .choices input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--focus-ring); }
@@ -357,16 +356,12 @@ function html(cls, markup) {
 
 function suggestionCard(sg, canReply) {
   const d = draft.decisions[sg.id] || {};
-  const setDecision = (decision) => {
-    draft.decisions[sg.id] = { ...d, decision: d.decision === decision ? "" : decision };
+  const approve = el("button", { className: "btn choice" + (d.approved ? " active" : ""), textContent: "Approve" });
+  approve.onclick = () => {
+    draft.decisions[sg.id] = { ...d, approved: !d.approved };
     renderAudit();
   };
-  const choice = (decision, label) => {
-    const b = el("button", { className: `btn choice ${decision}` + (d.decision === decision ? " active" : ""), textContent: label });
-    b.onclick = () => setDecision(decision);
-    return b;
-  };
-  const comment = el("input", { type: "text", placeholder: "Comment (optional)", value: d.comment || "" });
+  const comment = el("input", { type: "text", placeholder: "Comment", value: d.comment || "" });
   comment.dataset.key = "comment-" + sg.id;
   comment.oninput = () => { draft.decisions[sg.id] = { ...draft.decisions[sg.id], comment: comment.value }; };
   return el("section", { className: "card sg" + (sg.open ? "" : " closed") },
@@ -377,7 +372,7 @@ function suggestionCard(sg, canReply) {
     ...(sg.files.length ? [el("div", { className: "files" }, ...sg.files.map((f, i) => memoryLink(f, sg.memoryIDs[i])))] : []),
     html("md", sg.reasonHTML),
     ...(sg.proposedHTML ? [el("div", { className: "proposed" }, el("span", { className: "label", textContent: "Proposed" }), html("md", sg.proposedHTML))] : []),
-    ...(sg.open && canReply ? [el("div", { className: "choices" }, choice("accept", "Accept"), choice("reject", "Reject"), comment)] : []));
+    ...(sg.open && canReply ? [el("div", { className: "choices" }, approve, comment)] : []));
 }
 
 function renderAudit() {
@@ -404,8 +399,8 @@ function renderAudit() {
   message.oninput = () => { draft.message = message.value; };
   send.onclick = async () => {
     const decisions = Object.entries(draft.decisions)
-      .filter(([, d]) => d.decision || d.comment)
-      .map(([id, d]) => ({ id, decision: d.decision || "", comment: d.comment || "" }));
+      .filter(([, d]) => d.approved || d.comment?.trim())
+      .map(([id, d]) => ({ id, decision: d.approved ? "approve" : "comment", comment: d.comment || "" }));
     send.disabled = true;
     const res = await fetch(`api/audits/${a.session.token}/reply`, {
       method: "POST",
@@ -424,8 +419,8 @@ function renderAudit() {
   const summary = (r) => {
     const n = (d) => r.decisions?.filter((x) => x.decision === d).length || 0;
     const parts = [];
-    if (n("accept")) parts.push(`accepted ${n("accept")}`);
-    if (n("reject")) parts.push(`rejected ${n("reject")}`);
+    if (n("approve")) parts.push(`approved ${n("approve")}`);
+    if (n("comment")) parts.push(`commented on ${n("comment")}`);
     if (r.message) parts.push(`“${r.message}”`);
     return parts.join(", ") || "comments";
   };

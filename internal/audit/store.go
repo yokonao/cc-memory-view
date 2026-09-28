@@ -25,7 +25,7 @@ import (
 // <workspace>/audits/<token>/:
 //
 //	session.json   written by the server when it starts the session
-//	state.json     suggestions posted by the session (audit post)
+//	state.json     suggestions from the session (audit update)
 //	replies.jsonl  replies from the web UI, one per line (audit watch)
 //	cursor         how many replies audit watch has delivered
 
@@ -39,7 +39,7 @@ var (
 	statuses           = []string{StatusWorking, StatusWaiting, StatusDone}
 	actions            = []string{"keep", "update", "merge", "promote", "delete"}
 	suggestionStatuses = []string{"", "open", "applied", "dismissed"}
-	decisions          = []string{"accept", "reject", ""}
+	decisions          = []string{"approve", "comment"}
 	tokenRe            = regexp.MustCompile(`^[0-9a-f]{16}$`)
 )
 
@@ -132,17 +132,51 @@ func (s Store) SaveSession(sess Session) error {
 	return writeJSON(path, sess)
 }
 
-// Post validates a state from the session and stores it.
-func (s Store) Post(token string, r io.Reader) error {
+// Update merges an update from the session into the stored state: status
+// and message replace the old ones, and suggestions are merged by ID, field
+// by field, so suggestions left out are kept.
+func (s Store) Update(token string, r io.Reader) error {
 	path, err := s.file(token, "state.json")
 	if err != nil {
 		return err
 	}
-	var st State
+	var up State
 	dec := json.NewDecoder(r)
 	dec.DisallowUnknownFields()
-	if err := dec.Decode(&st); err != nil {
-		return fmt.Errorf("invalid state JSON: %w", err)
+	if err := dec.Decode(&up); err != nil {
+		return fmt.Errorf("invalid update JSON: %w", err)
+	}
+	a, err := s.Load(token)
+	if err != nil {
+		return err
+	}
+	st := State{}
+	if a.State != nil {
+		st = *a.State
+	}
+	st.Status, st.Message = up.Status, up.Message
+	for _, sg := range up.Suggestions {
+		i := slices.IndexFunc(st.Suggestions, func(old Suggestion) bool { return old.ID == sg.ID })
+		if i < 0 {
+			st.Suggestions = append(st.Suggestions, sg)
+			continue
+		}
+		old := &st.Suggestions[i]
+		if sg.Action != "" {
+			old.Action = sg.Action
+		}
+		if sg.Files != nil {
+			old.Files = sg.Files
+		}
+		if sg.Reason != "" {
+			old.Reason = sg.Reason
+		}
+		if sg.Proposed != "" {
+			old.Proposed = sg.Proposed
+		}
+		if sg.Status != "" {
+			old.Status = sg.Status
+		}
 	}
 	if err := st.validate(); err != nil {
 		return err
@@ -197,7 +231,10 @@ func (s Store) AddReply(token string, rep Reply) error {
 			return fmt.Errorf("no open suggestion %q", d.ID)
 		}
 		if !slices.Contains(decisions, d.Decision) {
-			return fmt.Errorf("decision must be accept or reject")
+			return fmt.Errorf("decision must be approve or comment")
+		}
+		if d.Decision == "comment" && strings.TrimSpace(d.Comment) == "" {
+			return fmt.Errorf("comment on %s is empty", d.ID)
 		}
 	}
 	if strings.TrimSpace(rep.Message) == "" && len(rep.Decisions) == 0 {
@@ -358,26 +395,4 @@ func readLines(path string) ([][]byte, error) {
 		}
 	}
 	return lines, sc.Err()
-}
-
-// Remove deletes a memory file on the session's behalf. It only accepts a
-// .md file directly in a project's memory directory, other than MEMORY.md.
-func Remove(configDir, file string) error {
-	file = filepath.Clean(file)
-	rel, err := filepath.Rel(filepath.Join(configDir, "projects"), file)
-	if err != nil {
-		return err
-	}
-	parts := strings.Split(filepath.ToSlash(rel), "/")
-	if len(parts) != 3 || parts[0] == ".." || parts[1] != "memory" || filepath.Ext(parts[2]) != ".md" || parts[2] == "MEMORY.md" {
-		return fmt.Errorf("%s is not a memory file", file)
-	}
-	info, err := os.Lstat(file)
-	if err != nil {
-		return err
-	}
-	if !info.Mode().IsRegular() {
-		return fmt.Errorf("%s is not a regular file", file)
-	}
-	return os.Remove(file)
 }
