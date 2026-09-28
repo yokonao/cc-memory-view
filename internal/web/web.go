@@ -3,11 +3,14 @@ package web
 
 import (
 	"bytes"
+	"context"
 	_ "embed"
 	"encoding/json"
+	"net"
 	"net/http"
 	"path/filepath"
 	"regexp"
+	"strings"
 	"time"
 
 	"github.com/yokonao/cc-memory-view/internal/memory"
@@ -20,6 +23,9 @@ var indexHTML []byte
 type Server struct {
 	Root       string
 	StaleAfter time.Duration
+	// StartAudit starts a Claude Code session auditing memory and returns
+	// its ID.
+	StartAudit func(context.Context) (string, error)
 }
 
 func (s *Server) Handler() http.Handler {
@@ -29,6 +35,7 @@ func (s *Server) Handler() http.Handler {
 		_, _ = w.Write(indexHTML)
 	})
 	mux.HandleFunc("GET /api/data", s.data)
+	mux.HandleFunc("POST /api/audit", s.audit)
 	return mux
 }
 
@@ -93,6 +100,33 @@ func (s *Server) data(w http.ResponseWriter, _ *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(out)
+}
+
+// audit accepts only same-origin requests from a page served on a local host
+// name, so other sites can't start sessions, even through DNS rebinding.
+func (s *Server) audit(w http.ResponseWriter, r *http.Request) {
+	if !localHost(r.Host) || r.Header.Get("Sec-Fetch-Site") != "same-origin" {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+	id, err := s.StartAudit(r.Context())
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]string{"id": id})
+}
+
+func localHost(hostport string) bool {
+	host, _, err := net.SplitHostPort(hostport)
+	if err != nil {
+		host = hostport
+	}
+	if ip := net.ParseIP(host); ip != nil {
+		return ip.IsLoopback()
+	}
+	return host == "localhost" || strings.HasSuffix(host, ".localhost")
 }
 
 var memoryLinkRe = regexp.MustCompile(`\[\[[^\[\]]+\]\]`)

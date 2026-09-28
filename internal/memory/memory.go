@@ -51,16 +51,24 @@ type Memory struct {
 	Body        string
 }
 
-// Root returns the directory holding project directories: $CLAUDE_CONFIG_DIR
-// or ~/.claude, plus /projects.
+// ConfigDir returns Claude Code's configuration directory: $CLAUDE_CONFIG_DIR
+// or ~/.claude.
+func ConfigDir() (string, error) {
+	if dir := os.Getenv("CLAUDE_CONFIG_DIR"); dir != "" {
+		return dir, nil
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, ".claude"), nil
+}
+
+// Root returns the directory holding project directories.
 func Root() (string, error) {
-	dir := os.Getenv("CLAUDE_CONFIG_DIR")
-	if dir == "" {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return "", err
-		}
-		dir = filepath.Join(home, ".claude")
+	dir, err := ConfigDir()
+	if err != nil {
+		return "", err
 	}
 	return filepath.Join(dir, "projects"), nil
 }

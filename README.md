@@ -47,6 +47,13 @@ Claude Code. For example:
 Run `cc-memory-view check --json` and audit my memory with me.
 ```
 
+**Audit with Claude Code** in the web UI does this for you: it starts
+`claude --bg` with a fixed audit prompt and shows the `claude attach <id>`
+command to continue the session. The session runs in the Claude config
+directory (`~/.claude`), which has to be trusted once: run `claude` there and
+accept the trust prompt. Only same-origin requests to a loopback or
+`*.localhost` host can start it.
+
 The project directory is taken from the `cwd` recorded in its session logs.
 `$CLAUDE_CONFIG_DIR` is honored in place of `~/.claude`.
 
