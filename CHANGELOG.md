@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v0.0.3 - 2026-09-29
+
 ### Changed
 
 - Audit sessions run in auto mode instead of `acceptEdits`, so a command outside the allowlist no longer waits for a permission prompt nobody sees.
