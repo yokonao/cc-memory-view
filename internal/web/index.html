@@ -122,6 +122,7 @@
   .row-desc { grid-column: 1; color: var(--muted); font-size: 0.95rem; }
   .row-meta { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 0.85rem; color: var(--faint); overflow-wrap: anywhere; min-width: 0; }
   .projects { margin-top: 20px; }
+  .projects .audit-head { margin-bottom: 8px; }
   .projects .row { align-items: center; }
   .projects .row:hover { background: none; }
   .link { border: 0; background: none; padding: 0; color: inherit; font-family: inherit; text-align: left; cursor: pointer; overflow-wrap: anywhere; }
@@ -273,7 +274,7 @@ function auditCard() {
 
 function projectsCard() {
   const projects = [...new Set([...data.memories, ...data.issues].map((x) => x.project))].sort();
-  return el("section", { className: "card list projects" }, ...projects.map((p) => {
+  const rows = projects.map((p) => {
     const a = latestAudit(p);
     const active = a && a.status !== "done";
     const memories = data.memories.filter((m) => m.project === p).length;
@@ -282,13 +283,17 @@ function projectsCard() {
     name.onclick = () => { $("project").value = p; renderList(); };
     const action = active
       ? el("a", { className: "btn", href: "#audit/" + a.session.token, textContent: "Open audit" })
-      : el("button", { className: "btn", textContent: starting.has(p) ? "Starting…" : "Audit", disabled: starting.has(p) });
+      : el("button", { className: "btn primary", textContent: starting.has(p) ? "Starting…" : "Audit", disabled: starting.has(p) });
     if (!active) action.onclick = () => startAudit(p);
     return el("div", { className: "row" }, name, action,
       el("span", { className: "row-meta" }, memories === 1 ? "1 memory" : `${memories} memories`,
         ...(issues ? [badge("issue", `${issues} issues`)] : []),
         ...(a ? [el("a", { href: "#audit/" + a.session.token }, badge("status" + (active ? "" : " done"), "audit " + a.status))] : [])));
-  }));
+  });
+  return el("div", { className: "projects" },
+    el("div", { className: "audit-head" }, el("span", { className: "label", textContent: "Projects" }),
+      el("span", { className: "audit-note", textContent: "Audit a project's memory with Claude Code. Audits of different projects run in parallel." })),
+    el("section", { className: "card list" }, ...rows));
 }
 
 let audits = [];
