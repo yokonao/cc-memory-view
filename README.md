@@ -41,9 +41,10 @@ Lists audit candidates, found by rules without judging content:
 
 Deciding what to keep, merge, move or delete is left to Claude Code.
 
-**Audit with Claude Code** in the web UI audits the project chosen in the
-project filter: it starts a `claude --bg` session in the project's directory
-with a fixed audit prompt. For each memory, Claude looks for a better home in
+The home page lists the projects with the status of their latest audit.
+**Audit** next to a project starts auditing it, and audits of different
+projects run in parallel. Each audit starts a `claude --bg` session in the
+project's directory with a fixed audit prompt. For each memory, Claude looks for a better home in
 the repository's docs and code, issues and pull requests, `CLAUDE.md` or a
 skill, and suggests deleting the memory if it's already there or moving it if
 not. Claude posts its suggestions to the web UI, where you approve or comment
