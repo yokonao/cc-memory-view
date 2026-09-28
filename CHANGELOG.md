@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Changed
+
+- The CLI is built with Cobra: every command has `--help`, and `audit update` and `audit watch` report missing arguments.
+
 ## v0.0.3 - 2026-09-29
 
 ### Changed
