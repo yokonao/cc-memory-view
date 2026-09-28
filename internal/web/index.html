@@ -96,7 +96,12 @@
   .audit-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; margin-bottom: 12px; }
   .audit-note { font-size: 0.88rem; color: var(--faint); overflow-wrap: anywhere; }
   .audit-note code { font-family: var(--mono); font-size: 0.85em; }
-  .launch { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--border); }
+  header .btn.primary { margin-left: auto; align-self: center; }
+  #launchBar { flex: none; display: flex; align-items: center; gap: 10px; padding: 10px 28px; background: var(--surface); border-bottom: 1px solid var(--border); }
+  #launchBar[hidden] { display: none; }
+  #launchBar .launch-result { flex: 1; }
+  .dismiss { flex: none; border: 0; background: none; color: var(--muted); font-size: 1.2rem; line-height: 1; cursor: pointer; padding: 2px 6px; }
+  .dismiss:hover { color: var(--accent); }
   .btn.primary { padding: 9px 16px; background: var(--accent); border-color: var(--accent); color: #fff; font-size: 0.95rem; font-weight: 600; }
   .btn.primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); color: #fff; }
   .btn:disabled { opacity: 0.6; cursor: default; }
@@ -157,6 +162,8 @@
   @media (max-width: 800px) {
     body { height: auto; display: block; }
     header { padding: 14px 16px; }
+    header .sub { display: none; }
+    #launchBar { padding: 10px 16px; }
     .panes { display: flex; flex-direction: column; }
     #listPane { padding: 20px 16px 40px; border-right: 0; }
     #detailPane { order: -1; padding: 20px 16px 0; }
@@ -173,7 +180,9 @@
   <span class="mark" aria-hidden="true"></span>
   <h1><a href="#">cc-memory-view</a></h1>
   <span class="sub">Claude Code Memory</span>
+  <button class="btn primary" id="auditButton" title="Starts claude --bg in the workspace prepared by cc-memory-view setup">Audit with Claude Code</button>
 </header>
+<div id="launchBar" hidden></div>
 <div class="panes">
   <div id="listPane">
     <div class="toolbar">
@@ -226,34 +235,33 @@ function auditCard() {
       stat(data.memories.length, "Memories"),
       stat(data.issues.length, "Issues", true)),
     ...(Object.keys(counts).length ? [el("div", { className: "kinds" }, ...Object.entries(counts).map(([k, n]) => badge("issue", `${k} ${n}`)))] : []),
-    ...(projectIssues.length ? [issueList(projectIssues, true)] : []),
-    launchPanel());
+    ...(projectIssues.length ? [issueList(projectIssues, true)] : []));
 }
 
 let launch = null;
 
-function launchPanel() {
-  const button = el("button", { className: "btn primary", textContent: "Audit with Claude Code", disabled: launch?.pending });
+function renderLaunch() {
+  $("auditButton").disabled = !!launch?.pending;
+  $("launchBar").hidden = !launch;
+  if (!launch) return;
   const result = el("div", { className: "launch-result" });
-  if (launch?.pending) {
+  if (launch.pending) {
     result.textContent = "Starting a background session…";
-  } else if (launch?.error) {
+  } else if (launch.error) {
     result.classList.add("error");
     result.textContent = launch.error;
-  } else if (launch?.id) {
+  } else {
     const cmd = `claude attach ${launch.id}`;
     result.append("Started in the background. Continue it with", el("code", { textContent: cmd }), copyButton(cmd));
-  } else {
-    result.textContent = "Starts claude --bg in the workspace prepared by cc-memory-view setup.";
   }
-  button.onclick = startAudit;
-  return el("div", { className: "launch", id: "launch" }, button, result);
+  const dismiss = el("button", { className: "dismiss", textContent: "×", title: "Dismiss", hidden: launch.pending });
+  dismiss.onclick = () => { launch = null; renderLaunch(); };
+  $("launchBar").replaceChildren(result, dismiss);
 }
 
 async function startAudit() {
-  const redraw = () => $("launch")?.replaceWith(launchPanel());
   launch = { pending: true };
-  redraw();
+  renderLaunch();
   try {
     const res = await fetch("api/audit", { method: "POST" });
     const text = await res.text();
@@ -261,7 +269,7 @@ async function startAudit() {
   } catch (e) {
     launch = { error: String(e) };
   }
-  redraw();
+  renderLaunch();
 }
 
 function renderList() {
@@ -336,6 +344,7 @@ async function load() {
 
 for (const id of ["q", "project", "type", "issuesOnly"]) $(id).addEventListener("input", renderList);
 window.addEventListener("hashchange", route);
+$("auditButton").onclick = startAudit;
 load();
 </script>
 </body>
