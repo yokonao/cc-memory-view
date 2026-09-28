@@ -26,7 +26,7 @@ import (
 var version = "dev"
 
 const usage = `Usage:
-  cc-memory-view [serve] [flags]   browse memory in the browser
+  cc-memory-view serve [flags]     browse memory in the browser
   cc-memory-view check [flags]     list audit candidates
   cc-memory-view setup             prepare the workspace audit sessions run in
   cc-memory-view --version
@@ -42,10 +42,11 @@ func main() {
 		return
 	}
 
-	cmd, args := "serve", flag.Args()
-	if len(args) > 0 {
-		cmd, args = args[0], args[1:]
+	if flag.NArg() == 0 {
+		flag.Usage()
+		os.Exit(2)
 	}
+	cmd, args := flag.Arg(0), flag.Args()[1:]
 	var err error
 	switch cmd {
 	case "serve":

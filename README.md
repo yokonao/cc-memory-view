@@ -11,7 +11,7 @@ See [docs/install.md](docs/install.md).
 ## Browse
 
 ```
-cc-memory-view [serve] [--addr ADDR] [--no-open] [--stale-days N]
+cc-memory-view serve [--addr ADDR] [--no-open] [--stale-days N]
 ```
 
 Starts a local web server (a random port on `127.0.0.1` by default), opens it
