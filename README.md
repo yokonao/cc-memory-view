@@ -18,6 +18,10 @@ Starts a local web server (a random port on `127.0.0.1` by default), opens it
 in the browser, and serves until interrupted. Search, filter by project and
 type, and read each memory rendered as Markdown with its audit issues.
 
+`--addr unix:///absolute/path.sock` listens on a Unix socket instead, in the
+form [devproxy](https://github.com/yokonao/devproxy) takes for its targets,
+so it can be served as `<route>.localhost`. The browser isn't opened then.
+
 ## Audit
 
 ```
