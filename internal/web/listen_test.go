@@ -1,4 +1,4 @@
-package main
+package web
 
 import (
 	"net"
@@ -9,9 +9,9 @@ import (
 
 func TestListenInvalidUnixAddress(t *testing.T) {
 	for _, addr := range []string{"unix://host/x.sock", "unix:relative.sock", "unix:///x.sock?q=1"} {
-		if ln, err := listen(addr); err == nil {
+		if ln, err := Listen(addr); err == nil {
 			_ = ln.Close()
-			t.Errorf("listen(%q) succeeded", addr)
+			t.Errorf("Listen(%q) succeeded", addr)
 		}
 	}
 }
@@ -27,12 +27,12 @@ func TestListenUnix(t *testing.T) {
 	stale.(*net.UnixListener).SetUnlinkOnClose(false)
 	_ = stale.Close()
 
-	ln, err := listen("unix://" + sock)
+	ln, err := Listen("unix://" + sock)
 	if err != nil {
 		t.Fatalf("stale socket: %v", err)
 	}
 
-	if other, err := listen("unix://" + sock); err == nil {
+	if other, err := Listen("unix://" + sock); err == nil {
 		_ = other.Close()
 		t.Error("listened on a socket in use")
 	}
@@ -48,7 +48,7 @@ func TestListenUnixNotSocket(t *testing.T) {
 	if err := os.WriteFile(file, nil, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if ln, err := listen("unix://" + file); err == nil {
+	if ln, err := Listen("unix://" + file); err == nil {
 		_ = ln.Close()
 		t.Error("replaced a regular file")
 	}
