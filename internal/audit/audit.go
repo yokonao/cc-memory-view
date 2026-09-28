@@ -4,10 +4,8 @@ package audit
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -15,11 +13,8 @@ import (
 	"strings"
 )
 
-// errSetup tells the user how to fix a missing or untrusted workspace.
-var errSetup = errors.New("the audit workspace isn't set up: run `cc-memory-view setup`")
-
-// Dir returns the workspace audit sessions run in:
-// $XDG_DATA_HOME/cc-memory-view, falling back to ~/.local/share.
+// Dir returns where audits are stored: $XDG_DATA_HOME/cc-memory-view,
+// falling back to ~/.local/share.
 func Dir() (string, error) {
 	dir := os.Getenv("XDG_DATA_HOME")
 	if dir == "" {
@@ -32,55 +27,13 @@ func Dir() (string, error) {
 	return filepath.Join(dir, "cc-memory-view"), nil
 }
 
-// Setup creates the workspace and runs claude there interactively, so the
-// user can accept the workspace trust prompt that `claude --bg` requires.
-func Setup(dir string) error {
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return err
-	}
-	if trusted(dir) {
-		fmt.Printf("%s is already set up.\n", dir)
-		return nil
-	}
-	fmt.Printf("Starting claude in %s.\nAccept the trust prompt if asked, then type /exit.\n\n", dir)
-	cmd := exec.Command("claude")
-	cmd.Dir = dir
-	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
-	return cmd.Run()
-}
-
-// trusted reports whether Claude Code recorded dir as a trusted workspace in
-// its global config ($CLAUDE_CONFIG_DIR/.claude.json or ~/.claude.json). It
-// only reads the file, and any doubt counts as untrusted.
-func trusted(dir string) bool {
-	path := filepath.Join(os.Getenv("CLAUDE_CONFIG_DIR"), ".claude.json")
-	if os.Getenv("CLAUDE_CONFIG_DIR") == "" {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return false
-		}
-		path = filepath.Join(home, ".claude.json")
-	}
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return false
-	}
-	var cfg struct {
-		Projects map[string]struct {
-			HasTrustDialogAccepted bool `json:"hasTrustDialogAccepted"`
-		} `json:"projects"`
-	}
-	if json.Unmarshal(data, &cfg) != nil {
-		return false
-	}
-	return cfg.Projects[dir].HasTrustDialogAccepted
-}
-
 type Params struct {
-	// Dir is the trusted workspace the session runs in.
+	// Dir is the project directory the session runs in.
 	Dir string
 	// ConfigDir is Claude Code's configuration directory.
 	ConfigDir string
+	// MemoryDir is the project's memory directory.
+	MemoryDir string
 	// Exe is the cc-memory-view binary the session runs.
 	Exe string
 	// Token names the audit the session reports to.
@@ -90,31 +43,44 @@ type Params struct {
 // Prompt is the fixed instruction the session starts with.
 func Prompt(p Params) string {
 	cmd := func(args string) string { return "`" + p.Exe + " " + args + "`" }
-	return fmt.Sprintf(`Audit my Claude Code auto memory with me. I follow along and reply in the cc-memory-view web UI, which talks to you only through these pre-approved commands. Run each of them, and rm, as its own Bash call, never combined with other commands (no ;, &&, pipes or loops), or it will wait for a permission prompt nobody sees. Read memory files with the Read, Glob and Grep tools, not the shell.
+	return fmt.Sprintf(`Audit this project's Claude Code auto memory in %[3]s with me. I follow along and reply in the cc-memory-view web UI, which talks to you only through these pre-approved commands. Run each of them, and rm and gh, as its own Bash call, never combined with other commands (no ;, &&, pipes or loops), or it will wait for a permission prompt nobody sees. Read files with the Read, Glob and Grep tools, not the shell.
 
 - %[1]s: update the web UI. Pass JSON on stdin (e.g. a quoted heredoc):
-  {"status": "working" | "waiting" | "done", "message": "Markdown for me", "suggestions": [{"id": "s1", "action": "keep" | "update" | "merge" | "promote" | "delete", "files": ["/absolute/path.md"], "reason": "Markdown", "proposed": "Markdown: the new content or the change", "status": "open" | "applied" | "dismissed"}]}
+  {"status": "working" | "waiting" | "done", "message": "Markdown for me", "suggestions": [{"id": "s1", "action": "keep" | "update" | "merge" | "move" | "delete", "files": ["/absolute/path.md"], "reason": "Markdown", "proposed": "Markdown: the new content or the change", "status": "open" | "applied" | "dismissed"}]}
   Status and message replace the previous ones. Suggestions are merged by ID, field by field: send new ones in full, and only the changed fields of existing ones (e.g. {"id": "s1", "status": "applied"}). Suggestions you leave out are kept; dismiss one instead of dropping it.
 - %[2]s: prints each reply from the web UI as one JSON line: {"message": "...", "decisions": [{"id": "s1", "decision": "approve" | "comment", "comment": "..."}]}. "approve" may carry a comment to take into account; "comment" asks you to revise the suggestion, or dismiss it if the comment says so. It exits once you set status "done".
 
+Memory is the last resort. For each memory, check whether it has a better home:
+- this repository's docs or source code (comments, tests, config),
+- issues or pull request descriptions (gh issue view/list, gh pr view/list, gh search),
+- this project's CLAUDE.md, or %[4]s when it holds across projects (other projects' memory under %[5]s shows whether it does),
+- a skill, in this repository's .claude/skills or %[6]s.
+If it's already there, suggest "delete". If it belongs there but isn't, suggest "move", with the destination and content in "proposed". Otherwise suggest "keep", "update" or "merge".
+
 Steps:
-1. Read every memory file under %[3]s with Glob and Read, and send your suggestions with status "waiting". Suggest promoting to %[4]s when the same rule appears in several projects.
+1. Read every memory file in %[3]s, look for better homes, and send your suggestions with status "waiting".
 2. Start the Monitor tool with %[2]s as its command and the longest timeout it allows. Its events are my replies. Whenever it expires before you set status "done", start it again: it resumes where it left off, so no reply is repeated or lost.
-3. Don't change any file until a reply approves it. On each reply, set status "working", apply the approved suggestions (taking comments into account, and keeping each project's MEMORY.md in sync), then update the suggestions you applied or revised and set status "waiting", or "done" when I say we're finished.`,
+3. Don't change any file until a reply approves it. On each reply, set status "working", apply the approved suggestions (taking comments into account, and keeping MEMORY.md in sync), then update the suggestions you applied or revised and set status "waiting", or "done" when I say we're finished. Don't write to GitHub: for a move to an issue or pull request, put the text in your message and delete the memory once I say I've posted it.`,
 		cmd("audit update "+p.Token),
 		cmd("audit watch "+p.Token),
+		p.MemoryDir,
+		filepath.Join(p.ConfigDir, "CLAUDE.md"),
 		filepath.Join(p.ConfigDir, "projects", "*", "memory"),
-		filepath.Join(p.ConfigDir, "CLAUDE.md"))
+		filepath.Join(p.ConfigDir, "skills"))
 }
 
 // allowedTools lets the session work in the background without permission
-// prompts: reading, the cc-memory-view commands, rm and Monitor. Edits are
-// accepted by the permission mode, within the workspace and ConfigDir.
+// prompts: reading, the cc-memory-view commands, rm, read-only gh and
+// Monitor. Edits are accepted by the permission mode, within the project and
+// ConfigDir.
 func allowedTools(p Params) string {
 	return strings.Join([]string{
 		"Read", "Glob", "Grep", "Monitor",
 		"Bash(" + p.Exe + " audit:*)",
 		"Bash(rm:*)",
+		"Bash(gh issue view:*)", "Bash(gh issue list:*)",
+		"Bash(gh pr view:*)", "Bash(gh pr list:*)",
+		"Bash(gh search:*)",
 	}, ",")
 }
 
@@ -125,8 +91,8 @@ var (
 
 // Start runs `claude --bg` and returns the session ID it prints.
 func Start(ctx context.Context, p Params) (string, error) {
-	if _, err := os.Stat(p.Dir); errors.Is(err, fs.ErrNotExist) {
-		return "", errSetup
+	if _, err := os.Stat(p.Dir); err != nil {
+		return "", err
 	}
 	// The prompt goes first: --add-dir and --allowedTools take several values.
 	cmd := exec.CommandContext(ctx, "claude", "--bg", Prompt(p),
@@ -138,7 +104,7 @@ func Start(ctx context.Context, p Params) (string, error) {
 	text := strings.TrimSpace(ansiRe.ReplaceAllString(string(out), ""))
 	if err != nil {
 		if strings.Contains(text, "not trusted") {
-			return "", errSetup
+			return "", fmt.Errorf("%s isn't trusted: run claude there once and accept the trust prompt", p.Dir)
 		}
 		if text == "" {
 			return "", err

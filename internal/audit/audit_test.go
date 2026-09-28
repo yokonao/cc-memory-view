@@ -29,7 +29,7 @@ func TestStart(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	id, err := Start(context.Background(), Params{Dir: dir, ConfigDir: "/cfg", Exe: "/bin/cc-memory-view", Token: "aaaabbbbccccdddd"})
+	id, err := Start(context.Background(), Params{Dir: dir, ConfigDir: "/cfg", MemoryDir: "/cfg/projects/-p/memory", Exe: "/bin/cc-memory-view", Token: "aaaabbbbccccdddd"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -51,7 +51,8 @@ func TestStart(t *testing.T) {
 	}
 	for _, want := range []string{
 		"`/bin/cc-memory-view audit watch aaaabbbbccccdddd`",
-		"--permission-mode\nacceptEdits\n--add-dir\n/cfg\n--allowedTools\nRead,Glob,Grep,Monitor,Bash(/bin/cc-memory-view audit:*),Bash(rm:*)\n",
+		"auto memory in /cfg/projects/-p/memory with me",
+		"--permission-mode\nacceptEdits\n--add-dir\n/cfg\n--allowedTools\nRead,Glob,Grep,Monitor,Bash(/bin/cc-memory-view audit:*),Bash(rm:*),Bash(gh issue view:*),Bash(gh issue list:*),Bash(gh pr view:*),Bash(gh pr list:*),Bash(gh search:*)\n",
 	} {
 		if !strings.Contains(args, want) {
 			t.Errorf("claude args lack %q:\n%s", want, args)
@@ -61,11 +62,11 @@ func TestStart(t *testing.T) {
 
 func TestStartFailure(t *testing.T) {
 	fakeClaude(t, `echo "Workspace not trusted. Run claude there." >&2; exit 1`)
-	if _, err := Start(context.Background(), Params{Dir: t.TempDir()}); err != errSetup {
+	if _, err := Start(context.Background(), Params{Dir: t.TempDir()}); err == nil || !strings.Contains(err.Error(), "isn't trusted") {
 		t.Errorf("untrusted: err = %v", err)
 	}
-	if _, err := Start(context.Background(), Params{Dir: filepath.Join(t.TempDir(), "missing")}); err != errSetup {
-		t.Errorf("missing workspace: err = %v", err)
+	if _, err := Start(context.Background(), Params{Dir: filepath.Join(t.TempDir(), "missing")}); err == nil {
+		t.Error("started in a missing directory")
 	}
 
 	fakeClaude(t, `echo "boom" >&2; exit 1`)
@@ -74,47 +75,9 @@ func TestStartFailure(t *testing.T) {
 	}
 }
 
-func TestSetup(t *testing.T) {
-	log := fakeClaude(t, "")
-	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
-	dir := filepath.Join(t.TempDir(), "a", "cc-memory-view")
-
-	if err := Setup(dir); err != nil {
-		t.Fatal(err)
-	}
-	got, err := os.ReadFile(log)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if first := strings.SplitN(string(got), "\n", 2)[0]; first != dir {
-		t.Errorf("claude ran in %q, want %q", first, dir)
-	}
-}
-
 func TestDir(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", "/data")
 	if dir, _ := Dir(); dir != "/data/cc-memory-view" {
 		t.Errorf("Dir() = %q", dir)
-	}
-}
-
-func TestSetupSkipsTrustedWorkspace(t *testing.T) {
-	log := fakeClaude(t, "")
-	cfg := t.TempDir()
-	t.Setenv("CLAUDE_CONFIG_DIR", cfg)
-	dir := filepath.Join(t.TempDir(), "cc-memory-view")
-	data := `{"projects":{"` + dir + `":{"hasTrustDialogAccepted":true}}}`
-	if err := os.WriteFile(filepath.Join(cfg, ".claude.json"), []byte(data), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	if err := Setup(dir); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := os.Stat(log); !os.IsNotExist(err) {
-		t.Error("claude ran for a trusted workspace")
-	}
-	if _, err := os.Stat(dir); err != nil {
-		t.Errorf("workspace not created: %v", err)
 	}
 }

@@ -37,7 +37,7 @@ const (
 
 var (
 	statuses           = []string{StatusWorking, StatusWaiting, StatusDone}
-	actions            = []string{"keep", "update", "merge", "promote", "delete"}
+	actions            = []string{"keep", "update", "merge", "move", "delete"}
 	suggestionStatuses = []string{"", "open", "applied", "dismissed"}
 	decisions          = []string{"approve", "comment"}
 	tokenRe            = regexp.MustCompile(`^[0-9a-f]{16}$`)
@@ -46,6 +46,7 @@ var (
 type Session struct {
 	Token   string    `json:"token"`
 	ID      string    `json:"id"`
+	Project string    `json:"project"`
 	Started time.Time `json:"started"`
 }
 

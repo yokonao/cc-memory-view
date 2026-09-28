@@ -39,37 +39,26 @@ Lists audit candidates, found by rules without judging content:
 | `broken_link`    | a `[[name]]` link matches no memory in the project               |
 | `stale`          | not modified for `--stale-days` days (default 90)                |
 
-Deciding what to keep, merge, promote to `CLAUDE.md` or delete is left to
-Claude Code. For example:
+Deciding what to keep, merge, move or delete is left to Claude Code.
 
-```
-Run `cc-memory-view check --json` and audit my memory with me.
-```
-
-**Audit with Claude Code** in the web UI does this for you: it starts a
-`claude --bg` session with a fixed audit prompt. Claude posts its suggestions
-to the web UI, where you approve or comment on each one and reply; the
-session receives your replies through a `Monitor` and applies only what you
-approved. You can also continue it in a terminal with `claude attach <id>`.
-Only same-origin requests to a loopback or `*.localhost` host can start or
-reply to it.
+**Audit with Claude Code** in the web UI audits the project chosen in the
+project filter: it starts a `claude --bg` session in the project's directory
+with a fixed audit prompt. For each memory, Claude looks for a better home in
+the repository's docs and code, issues and pull requests, `CLAUDE.md` or a
+skill, and suggests deleting the memory if it's already there or moving it if
+not. Claude posts its suggestions to the web UI, where you approve or comment
+on each one and reply; the session receives your replies through a `Monitor`
+and applies only what you approved. It doesn't write to GitHub: moves to an
+issue or pull request are left to you. You can also continue it in a terminal
+with `claude attach <id>`. Only same-origin requests to a loopback or
+`*.localhost` host can start or reply to it.
 
 The session talks to the web UI through `cc-memory-view audit update` and
-`audit watch`. It starts with those commands and `rm` allowed, `--permission-mode
-acceptEdits` and the Claude config directory added, so it runs without
-permission prompts.
-
-The session runs in a dedicated workspace,
-`$XDG_DATA_HOME/cc-memory-view` (`~/.local/share/cc-memory-view` by default),
-which `claude --bg` requires to be trusted. Prepare it once:
-
-```
-cc-memory-view setup
-```
-
-This creates the directory and starts `claude` there; accept the trust prompt,
-then type `/exit`. Once Claude Code has recorded the workspace as trusted,
-`setup` skips starting it.
+`audit watch`. It starts with those commands, `rm` and read-only `gh`
+commands allowed, `--permission-mode acceptEdits` and the Claude config
+directory added, so it runs without permission prompts. `claude --bg`
+requires the project directory to be trusted, which it is once you've
+accepted the trust prompt there.
 
 The project directory is taken from the `cwd` recorded in its session logs.
 `$CLAUDE_CONFIG_DIR` is honored in place of `~/.claude`.
