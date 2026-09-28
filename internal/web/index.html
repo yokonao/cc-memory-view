@@ -244,7 +244,7 @@ function launchPanel() {
     const cmd = `claude attach ${launch.id}`;
     result.append("Started in the background. Continue it with", el("code", { textContent: cmd }), copyButton(cmd));
   } else {
-    result.textContent = "Starts claude --bg in your Claude config directory.";
+    result.textContent = "Starts claude --bg in the workspace prepared by cc-memory-view setup.";
   }
   button.onclick = startAudit;
   return el("div", { className: "launch", id: "launch" }, button, result);

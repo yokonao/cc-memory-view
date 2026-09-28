@@ -28,6 +28,7 @@ var version = "dev"
 const usage = `Usage:
   cc-memory-view [serve] [flags]   browse memory in the browser
   cc-memory-view check [flags]     list audit candidates
+  cc-memory-view setup             prepare the workspace audit sessions run in
   cc-memory-view --version
 `
 
@@ -51,6 +52,8 @@ func main() {
 		err = serve(args)
 	case "check":
 		err = check(args)
+	case "setup":
+		err = setup()
 	default:
 		flag.Usage()
 		os.Exit(2)
@@ -80,6 +83,10 @@ func serve(args []string) error {
 	if err != nil {
 		return err
 	}
+	auditDir, err := audit.Dir()
+	if err != nil {
+		return err
+	}
 	ln, err := listen(*addr)
 	if err != nil {
 		return err
@@ -102,7 +109,7 @@ func serve(args []string) error {
 		Root:       filepath.Join(configDir, "projects"),
 		StaleAfter: days(*staleDays),
 		StartAudit: func(ctx context.Context) (string, error) {
-			return audit.Start(ctx, audit.Params{ConfigDir: configDir, Exe: exe, StaleDays: *staleDays})
+			return audit.Start(ctx, audit.Params{Dir: auditDir, ConfigDir: configDir, Exe: exe, StaleDays: *staleDays})
 		},
 	}
 	srv := &http.Server{Handler: s.Handler()}
@@ -123,6 +130,14 @@ func openBrowser(url string) error {
 		name = "open"
 	}
 	return exec.Command(name, url).Start()
+}
+
+func setup() error {
+	dir, err := audit.Dir()
+	if err != nil {
+		return err
+	}
+	return audit.Setup(dir)
 }
 
 func check(args []string) error {

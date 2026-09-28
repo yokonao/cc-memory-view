@@ -49,10 +49,19 @@ Run `cc-memory-view check --json` and audit my memory with me.
 
 **Audit with Claude Code** in the web UI does this for you: it starts
 `claude --bg` with a fixed audit prompt and shows the `claude attach <id>`
-command to continue the session. The session runs in the Claude config
-directory (`~/.claude`), which has to be trusted once: run `claude` there and
-accept the trust prompt. Only same-origin requests to a loopback or
+command to continue the session. Only same-origin requests to a loopback or
 `*.localhost` host can start it.
+
+The session runs in a dedicated workspace,
+`$XDG_DATA_HOME/cc-memory-view` (`~/.local/share/cc-memory-view` by default),
+which `claude --bg` requires to be trusted. Prepare it once:
+
+```
+cc-memory-view setup
+```
+
+This creates the directory and starts `claude` there; accept the trust prompt,
+then type `/exit`.
 
 The project directory is taken from the `cwd` recorded in its session logs.
 `$CLAUDE_CONFIG_DIR` is honored in place of `~/.claude`.

@@ -29,7 +29,7 @@ func TestStart(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	id, err := Start(context.Background(), Params{ConfigDir: dir, Exe: "/bin/cc-memory-view", StaleDays: 30})
+	id, err := Start(context.Background(), Params{Dir: dir, ConfigDir: "/cfg", Exe: "/bin/cc-memory-view", StaleDays: 30})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -54,10 +54,39 @@ func TestStart(t *testing.T) {
 }
 
 func TestStartFailure(t *testing.T) {
-	fakeClaude(t, `echo "Workspace not trusted." >&2; exit 1`)
+	fakeClaude(t, `echo "Workspace not trusted. Run claude there." >&2; exit 1`)
+	if _, err := Start(context.Background(), Params{Dir: t.TempDir()}); err != errSetup {
+		t.Errorf("untrusted: err = %v", err)
+	}
+	if _, err := Start(context.Background(), Params{Dir: filepath.Join(t.TempDir(), "missing")}); err != errSetup {
+		t.Errorf("missing workspace: err = %v", err)
+	}
 
-	_, err := Start(context.Background(), Params{ConfigDir: t.TempDir()})
-	if err == nil || err.Error() != "Workspace not trusted." {
-		t.Errorf("err = %v", err)
+	fakeClaude(t, `echo "boom" >&2; exit 1`)
+	if _, err := Start(context.Background(), Params{Dir: t.TempDir()}); err == nil || err.Error() != "boom" {
+		t.Errorf("other failure: err = %v", err)
+	}
+}
+
+func TestSetup(t *testing.T) {
+	log := fakeClaude(t, "")
+	dir := filepath.Join(t.TempDir(), "a", "cc-memory-view")
+
+	if err := Setup(dir); err != nil {
+		t.Fatal(err)
+	}
+	got, err := os.ReadFile(log)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first := strings.SplitN(string(got), "\n", 2)[0]; first != dir {
+		t.Errorf("claude ran in %q, want %q", first, dir)
+	}
+}
+
+func TestDir(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", "/data")
+	if dir, _ := Dir(); dir != "/data/cc-memory-view" {
+		t.Errorf("Dir() = %q", dir)
 	}
 }
