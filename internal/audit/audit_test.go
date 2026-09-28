@@ -29,7 +29,7 @@ func TestStart(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	id, err := Start(context.Background(), Params{Dir: dir, ConfigDir: "/cfg", Exe: "/bin/cc-memory-view", StaleDays: 30})
+	id, err := Start(context.Background(), Params{Dir: dir, ConfigDir: "/cfg", Exe: "/bin/cc-memory-view", StaleDays: 30, Token: "aaaabbbbccccdddd"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -41,15 +41,22 @@ func TestStart(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	lines := strings.SplitN(string(got), "\n", 3)
+	args := string(got)
+	lines := strings.SplitN(args, "\n", 3)
 	if lines[0] != dir {
 		t.Errorf("ran in %q, want %q", lines[0], dir)
 	}
 	if lines[1] != "--bg" {
 		t.Errorf("first arg = %q", lines[1])
 	}
-	if !strings.Contains(lines[2], "`/bin/cc-memory-view check --json --stale-days 30`") {
-		t.Errorf("prompt lacks the check command:\n%s", lines[2])
+	for _, want := range []string{
+		"`/bin/cc-memory-view check --json --stale-days 30`",
+		"`/bin/cc-memory-view audit watch aaaabbbbccccdddd`",
+		"--permission-mode\nacceptEdits\n--add-dir\n/cfg\n--allowedTools\nRead,Glob,Grep,Monitor,Bash(/bin/cc-memory-view check:*),Bash(/bin/cc-memory-view audit:*)\n",
+	} {
+		if !strings.Contains(args, want) {
+			t.Errorf("claude args lack %q:\n%s", want, args)
+		}
 	}
 }
 

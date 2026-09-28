@@ -159,6 +159,41 @@
   .md pre code { background: none; border: none; padding: 0; color: var(--code-ink); font-size: 0.88rem; }
   .md blockquote { border-left: 3px solid var(--border-strong); padding-left: 14px; color: var(--muted); }
 
+  .audit-page .title { margin-bottom: 4px; }
+  .audit-status { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-bottom: 20px; font-size: 0.95rem; color: var(--muted); }
+  .badge.status { background: var(--accent-soft); border-color: transparent; color: var(--accent); }
+  .badge.status.done { background: var(--surface-2); color: var(--muted); }
+  .attach { display: inline-flex; align-items: center; gap: 8px; }
+  .attach code, .files code { font: 0.85rem var(--mono); }
+  .message { padding: 20px 24px; margin-bottom: 24px; }
+  .section-label { display: block; margin: 28px 0 12px; }
+  .sg { padding: 18px 22px; margin-bottom: 14px; }
+  .sg.closed { opacity: 0.65; }
+  .sg-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .sg-id { font: 0.8rem var(--mono); color: var(--faint); }
+  .badge.action { background: var(--accent-soft); border-color: transparent; color: var(--accent); text-transform: uppercase; letter-spacing: 0.05em; }
+  .badge.action.delete { background: var(--warn-soft); color: var(--warn); }
+  .badge.action.keep { background: var(--surface-2); border-color: var(--border); color: var(--muted); }
+  .files { display: flex; flex-direction: column; gap: 2px; margin-bottom: 10px; overflow-wrap: anywhere; }
+  .files a { font: 0.85rem var(--mono); }
+  .sg .md, .message.md { padding: 0; font-size: 0.98rem; }
+  .message.md { padding: 20px 24px; }
+  .proposed { margin-top: 12px; padding: 12px 16px; border-left: 3px solid var(--accent); background: var(--surface-2); border-radius: 8px; }
+  .proposed .label { display: block; margin-bottom: 4px; }
+  .choices { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 14px; }
+  .choice.active.accept { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .choice.active.reject { background: var(--ink); border-color: var(--ink); color: var(--bg); }
+  .choices input { flex: 1; min-width: 180px; padding: 6px 10px; border: 1px solid var(--border-strong); border-radius: 8px; background: var(--surface); color: var(--ink); font: 0.9rem var(--sans); }
+  textarea { width: 100%; min-height: 90px; padding: 10px 14px; border: 1px solid var(--border-strong); border-radius: 10px; background: var(--surface); color: var(--ink); font: 0.95rem/1.6 var(--sans); resize: vertical; }
+  textarea:focus, .choices input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--focus-ring); }
+  .send { display: flex; align-items: center; gap: 12px; margin-top: 10px; font-size: 0.9rem; color: var(--muted); }
+  .replies { list-style: none; display: flex; flex-direction: column; gap: 8px; }
+  .replies li { padding: 10px 16px; font-size: 0.92rem; color: var(--muted); }
+  .replies time { font-size: 0.82rem; color: var(--faint); margin-right: 8px; }
+  .callout { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; padding: 12px 16px; margin-bottom: 24px; border-radius: 10px; background: var(--accent-soft); font-size: 0.95rem; }
+  .callout .md { padding: 0; font-size: 0.95rem; }
+  .callout .md p { margin: 0; }
+
   @media (max-width: 800px) {
     body { height: auto; display: block; }
     header { padding: 14px 16px; }
@@ -210,10 +245,6 @@ function el(tag, attrs = {}, ...children) {
 const badge = (cls, text) => el("span", { className: "badge " + cls, textContent: text });
 const date = (s) => new Date(s).toLocaleDateString();
 
-function fillSelect(select, values) {
-  for (const v of [...new Set(values)].sort()) select.append(el("option", { value: v, textContent: v }));
-}
-
 function issueList(issues, withProject) {
   return el("ul", { className: "issues" }, ...issues.map((i) =>
     el("li", {}, el("b", { textContent: i.kind }), withProject ? `${i.project} — ${i.detail}` : i.detail)));
@@ -239,37 +270,182 @@ function auditCard() {
 }
 
 let launch = null;
+let latest = null;
+let auditData = null;
+let auditJSON = "";
+const draft = { token: null, decisions: {}, message: "" };
 
 function renderLaunch() {
+  const active = latest && latest.status !== "done";
+  $("auditButton").textContent = active ? "Open audit" : "Audit with Claude Code";
   $("auditButton").disabled = !!launch?.pending;
   $("launchBar").hidden = !launch;
   if (!launch) return;
-  const result = el("div", { className: "launch-result" });
-  if (launch.pending) {
-    result.textContent = "Starting a background session…";
-  } else if (launch.error) {
-    result.classList.add("error");
-    result.textContent = launch.error;
-  } else {
-    const cmd = `claude attach ${launch.id}`;
-    result.append("Started in the background. Continue it with", el("code", { textContent: cmd }), copyButton(cmd));
-  }
+  const result = el("div", { className: "launch-result" + (launch.error ? " error" : ""),
+    textContent: launch.pending ? "Starting a background session…" : launch.error });
   const dismiss = el("button", { className: "dismiss", textContent: "×", title: "Dismiss", hidden: launch.pending });
   dismiss.onclick = () => { launch = null; renderLaunch(); };
   $("launchBar").replaceChildren(result, dismiss);
 }
 
-async function startAudit() {
+async function onAuditButton() {
+  if (latest && latest.status !== "done") {
+    location.hash = "audit";
+    return;
+  }
   launch = { pending: true };
   renderLaunch();
   try {
-    const res = await fetch("api/audit", { method: "POST" });
+    const res = await fetch("api/audits", { method: "POST" });
     const text = await res.text();
-    launch = res.ok ? JSON.parse(text) : { error: text.trim() };
+    launch = res.ok ? null : { error: text.trim() };
+    if (res.ok) {
+      await poll();
+      location.hash = "audit";
+    }
   } catch (e) {
     launch = { error: String(e) };
   }
   renderLaunch();
+}
+
+// poll refreshes the latest audit, and the memory list after Claude changed
+// something.
+async function poll() {
+  try {
+    const list = await (await fetch("api/audits")).json();
+    latest = list[0] || null;
+    renderLaunch();
+    if (!latest) return;
+    const res = await fetch("api/audits/" + latest.session.token);
+    const text = await res.text();
+    if (!res.ok || text === auditJSON) return;
+    const prev = auditData;
+    auditJSON = text;
+    auditData = JSON.parse(text);
+    if (draft.token !== auditData.session.token) Object.assign(draft, { token: auditData.session.token, decisions: {}, message: "" });
+    if (prev && prev.updated !== auditData.updated) await loadData();
+    else if (current() === "audit" || memoryOfSuggestion()) route(false);
+  } catch {
+    // Keep showing the last known state; the next poll retries.
+  }
+}
+
+const memoryOfSuggestion = () => auditData?.suggestions.some((sg) => sg.memoryIDs.includes(current()));
+
+const statusText = {
+  starting: "Claude is starting and reading your memory…",
+  working: "Claude is working…",
+  waiting: "Waiting for your reply.",
+  done: "Finished.",
+};
+
+function memoryLink(file, id) {
+  const m = data.memories.find((m) => m.id === id);
+  return m ? el("a", { href: "#" + id, textContent: `${m.name} · ${m.project}`, title: file }) : el("code", { textContent: file });
+}
+
+function html(cls, markup) {
+  const e = el("div", { className: cls });
+  e.innerHTML = markup;
+  return e;
+}
+
+function suggestionCard(sg, canReply) {
+  const d = draft.decisions[sg.id] || {};
+  const setDecision = (decision) => {
+    draft.decisions[sg.id] = { ...d, decision: d.decision === decision ? "" : decision };
+    renderAudit();
+  };
+  const choice = (decision, label) => {
+    const b = el("button", { className: `btn choice ${decision}` + (d.decision === decision ? " active" : ""), textContent: label });
+    b.onclick = () => setDecision(decision);
+    return b;
+  };
+  const comment = el("input", { type: "text", placeholder: "Comment (optional)", value: d.comment || "" });
+  comment.dataset.key = "comment-" + sg.id;
+  comment.oninput = () => { draft.decisions[sg.id] = { ...draft.decisions[sg.id], comment: comment.value }; };
+  return el("section", { className: "card sg" + (sg.open ? "" : " closed") },
+    el("div", { className: "sg-head" },
+      badge("action " + sg.action, sg.action),
+      ...(sg.open ? [] : [badge("status done", sg.status)]),
+      el("span", { className: "sg-id", textContent: sg.id })),
+    ...(sg.files.length ? [el("div", { className: "files" }, ...sg.files.map((f, i) => memoryLink(f, sg.memoryIDs[i])))] : []),
+    html("md", sg.reasonHTML),
+    ...(sg.proposedHTML ? [el("div", { className: "proposed" }, el("span", { className: "label", textContent: "Proposed" }), html("md", sg.proposedHTML))] : []),
+    ...(sg.open && canReply ? [el("div", { className: "choices" }, choice("accept", "Accept"), choice("reject", "Reject"), comment)] : []));
+}
+
+function renderAudit() {
+  const a = auditData;
+  if (!a) {
+    $("detailPane").replaceChildren(el("p", { className: "empty", textContent: "No audit yet. Start one with the button above." }));
+    return;
+  }
+  const focused = document.activeElement?.dataset?.key;
+  const selection = focused && [document.activeElement.selectionStart, document.activeElement.selectionEnd];
+
+  const lastReply = a.replies[a.replies.length - 1];
+  const replyPending = a.status === "waiting" && lastReply && new Date(lastReply.time) > new Date(a.updated);
+  const canReply = a.status === "waiting" && !replyPending;
+  const attach = `claude attach ${a.session.id}`;
+
+  const message = el("textarea", { placeholder: "Message to Claude (optional)", value: draft.message, disabled: !canReply });
+  message.dataset.key = "message";
+  const send = el("button", { className: "btn primary", textContent: "Send reply", disabled: !canReply });
+  const sendNote = el("span");
+  message.oninput = () => { draft.message = message.value; };
+  send.onclick = async () => {
+    const decisions = Object.entries(draft.decisions)
+      .filter(([, d]) => d.decision || d.comment)
+      .map(([id, d]) => ({ id, decision: d.decision || "", comment: d.comment || "" }));
+    send.disabled = true;
+    const res = await fetch(`api/audits/${a.session.token}/reply`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message: draft.message, decisions }),
+    });
+    if (!res.ok) {
+      sendNote.textContent = (await res.text()).trim();
+      send.disabled = false;
+      return;
+    }
+    Object.assign(draft, { decisions: {}, message: "" });
+    await poll();
+  };
+
+  const summary = (r) => {
+    const n = (d) => r.decisions?.filter((x) => x.decision === d).length || 0;
+    const parts = [];
+    if (n("accept")) parts.push(`accepted ${n("accept")}`);
+    if (n("reject")) parts.push(`rejected ${n("reject")}`);
+    if (r.message) parts.push(`“${r.message}”`);
+    return parts.join(", ") || "comments";
+  };
+
+  $("detailPane").replaceChildren(el("div", { className: "audit-page" },
+    el("a", { className: "back", href: "#", textContent: "← All memories" }),
+    el("h2", { className: "title", textContent: "Audit with Claude Code" }),
+    el("div", { className: "audit-status" },
+      badge("status" + (a.status === "done" ? " done" : ""), a.status),
+      replyPending ? "Reply sent. Waiting for Claude to pick it up…" : statusText[a.status] || "",
+      el("span", { className: "attach" }, el("code", { textContent: attach }), copyButton(attach))),
+    ...(a.messageHTML ? [html("card message md", a.messageHTML)] : []),
+    ...(a.suggestions.length ? [el("span", { className: "label section-label", textContent: `Suggestions (${a.suggestions.filter((s) => s.open).length} open)` }),
+      ...a.suggestions.map((sg) => suggestionCard(sg, canReply))] : []),
+    ...(a.status !== "done" ? [el("span", { className: "label section-label", textContent: "Reply" }), message,
+      el("div", { className: "send" }, send, sendNote)] : []),
+    ...(a.replies.length ? [el("span", { className: "label section-label", textContent: "Your replies" }),
+      el("ul", { className: "replies" }, ...a.replies.map((r) =>
+        el("li", { className: "card" }, el("time", { textContent: new Date(r.time).toLocaleString() }), summary(r))))] : [])));
+
+  if (focused) {
+    const e = document.querySelector(`[data-key="${focused}"]`);
+    if (e) {
+      e.focus();
+      e.setSelectionRange?.(...selection);
+    }
+  }
 }
 
 function renderList() {
@@ -315,22 +491,34 @@ function renderDetail(m) {
       ...row("Modified", new Date(m.modified).toLocaleString()),
       ...row("File", el("span", { className: "path" }, el("span", { textContent: m.file }), copyButton(m.file)))),
     ...(m.issues?.length ? [issueList(m.issues, false)] : []),
+    ...(auditData?.suggestions.filter((sg) => sg.open && sg.memoryIDs.includes(m.id)).map((sg) =>
+      el("div", { className: "callout" }, el("span", { className: "label", textContent: "Claude suggests" }), badge("action " + sg.action, sg.action),
+        html("md", sg.reasonHTML), el("a", { href: "#audit", textContent: "Open audit →" }))) || []),
     body);
 }
 
 const current = () => decodeURIComponent(location.hash.slice(1));
 
-function route() {
-  const m = data.memories.find((m) => m.id === current());
-  document.body.classList.toggle("selected-memory", !!m);
+function route(scroll = true) {
+  const id = current();
+  const m = data.memories.find((m) => m.id === id);
+  document.body.classList.toggle("selected-memory", !!m || id === "audit");
   if (m) renderDetail(m);
+  else if (id === "audit") renderAudit();
   else $("detailPane").replaceChildren(auditCard());
   renderList();
+  if (!scroll) return;
   $("detailPane").scrollTop = 0;
-  if (m && matchMedia("(max-width: 800px)").matches) window.scrollTo(0, 0);
+  if ((m || id === "audit") && matchMedia("(max-width: 800px)").matches) window.scrollTo(0, 0);
 }
 
-async function load() {
+function fillSelect(select, values) {
+  const value = select.value;
+  select.replaceChildren(select.options[0], ...[...new Set(values)].sort().map((v) => el("option", { value: v, textContent: v })));
+  select.value = value;
+}
+
+async function loadData() {
   const res = await fetch("api/data");
   if (!res.ok) {
     $("list").replaceChildren(el("div", { className: "empty", textContent: await res.text() }));
@@ -339,12 +527,19 @@ async function load() {
   data = await res.json();
   fillSelect($("project"), data.memories.map((m) => m.project));
   fillSelect($("type"), data.memories.map((m) => m.type).filter(Boolean));
+  route(false);
+}
+
+async function load() {
+  await loadData();
+  await poll();
   route();
+  setInterval(poll, 3000);
 }
 
 for (const id of ["q", "project", "type", "issuesOnly"]) $(id).addEventListener("input", renderList);
 window.addEventListener("hashchange", route);
-$("auditButton").onclick = startAudit;
+$("auditButton").onclick = onAuditButton;
 load();
 </script>
 </body>
