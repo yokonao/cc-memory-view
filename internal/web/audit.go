@@ -31,12 +31,17 @@ func writeJSON(w http.ResponseWriter, v any) {
 }
 
 func (s *Server) startAudit(w http.ResponseWriter, r *http.Request) {
+	var req struct{ Project string }
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<16)).Decode(&req); err != nil || req.Project == "" {
+		http.Error(w, "choose a project to audit", http.StatusBadRequest)
+		return
+	}
 	token := audit.NewToken()
 	started := time.Now()
-	id, err := s.StartAudit(r.Context(), token)
+	id, err := s.StartAudit(r.Context(), token, req.Project)
 	if err == nil {
 		if err = s.Audits.Create(token); err == nil {
-			err = s.Audits.SaveSession(audit.Session{Token: token, ID: id, Started: started})
+			err = s.Audits.SaveSession(audit.Session{Token: token, ID: id, Project: req.Project, Started: started})
 		}
 	}
 	if err != nil {

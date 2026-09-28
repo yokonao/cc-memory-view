@@ -17,7 +17,7 @@ func newServer(t *testing.T) (*Server, *int) {
 	return &Server{
 		Root:   "/cfg/projects",
 		Audits: audit.Store{Dir: t.TempDir()},
-		StartAudit: func(context.Context, string) (string, error) {
+		StartAudit: func(context.Context, string, string) (string, error) {
 			started++
 			return "0ebad0f0", nil
 		},
@@ -51,7 +51,7 @@ func TestStartAuditGuard(t *testing.T) {
 		{"evil.example:8080", "same-origin", http.StatusForbidden},
 		{"localhost.evil.example", "same-origin", http.StatusForbidden},
 	} {
-		rec := do(h, http.MethodPost, "/api/audits", tc.host, tc.fetchSite, "")
+		rec := do(h, http.MethodPost, "/api/audits", tc.host, tc.fetchSite, `{"project": "~/p"}`)
 		if rec.Code != tc.want {
 			t.Errorf("host %q, Sec-Fetch-Site %q: status %d, want %d", tc.host, tc.fetchSite, rec.Code, tc.want)
 		}
@@ -65,14 +65,17 @@ func TestAuditFlow(t *testing.T) {
 	s, _ := newServer(t)
 	h := s.Handler()
 
-	rec := do(h, http.MethodPost, "/api/audits", "localhost", "same-origin", "")
+	if rec := do(h, http.MethodPost, "/api/audits", "localhost", "same-origin", `{}`); rec.Code != http.StatusBadRequest {
+		t.Errorf("start without a project: %d", rec.Code)
+	}
+	rec := do(h, http.MethodPost, "/api/audits", "localhost", "same-origin", `{"project": "~/p"}`)
 	var started struct{ Token, ID string }
 	if err := json.NewDecoder(rec.Body).Decode(&started); err != nil || started.ID != "0ebad0f0" {
 		t.Fatalf("start: %v %+v", err, started)
 	}
 	path := "/api/audits/" + started.Token
 
-	if rec := do(h, http.MethodGet, "/api/audits", "localhost", "", ""); !strings.Contains(rec.Body.String(), `"session":{"token":"`+started.Token) || !strings.Contains(rec.Body.String(), `"status":"starting"`) {
+	if rec := do(h, http.MethodGet, "/api/audits", "localhost", "", ""); !strings.Contains(rec.Body.String(), `"session":{"token":"`+started.Token) || !strings.Contains(rec.Body.String(), `"project":"~/p"`) || !strings.Contains(rec.Body.String(), `"status":"starting"`) {
 		t.Errorf("list: %s", rec.Body)
 	}
 	if rec := do(h, http.MethodPost, path+"/reply", "localhost", "same-origin", `{"message": "hi"}`); rec.Code != http.StatusConflict {

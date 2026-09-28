@@ -24,9 +24,9 @@ type Server struct {
 	Root       string
 	StaleAfter time.Duration
 	Audits     audit.Store
-	// StartAudit starts a Claude Code session auditing memory that reports
-	// to the audit token, and returns the session's ID.
-	StartAudit func(ctx context.Context, token string) (string, error)
+	// StartAudit starts a Claude Code session auditing a project's memory
+	// that reports to the audit token, and returns the session's ID.
+	StartAudit func(ctx context.Context, token, project string) (string, error)
 }
 
 func (s *Server) Handler() http.Handler {

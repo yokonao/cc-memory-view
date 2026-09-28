@@ -214,7 +214,7 @@
   <span class="mark" aria-hidden="true"></span>
   <h1><a href="#">cc-memory-view</a></h1>
   <span class="sub">Claude Code Memory</span>
-  <button class="btn primary" id="auditButton" title="Starts claude --bg in the workspace prepared by cc-memory-view setup">Audit with Claude Code</button>
+  <button class="btn primary" id="auditButton" title="Starts claude --bg in the project selected below">Audit with Claude Code</button>
 </header>
 <div id="launchBar" hidden></div>
 <div class="panes">
@@ -276,8 +276,9 @@ const draft = { token: null, decisions: {}, message: "" };
 
 function renderLaunch() {
   const active = latest && latest.status !== "done";
-  $("auditButton").textContent = active ? "Open audit" : "Audit with Claude Code";
-  $("auditButton").disabled = !!launch?.pending;
+  const project = $("project").value;
+  $("auditButton").textContent = active ? "Open audit" : project ? `Audit ${project}` : "Choose a project to audit";
+  $("auditButton").disabled = !!launch?.pending || !active && !project;
   $("launchBar").hidden = !launch;
   if (!launch) return;
   const result = el("div", { className: "launch-result" + (launch.error ? " error" : ""),
@@ -299,7 +300,11 @@ async function startAudit() {
   launch = { pending: true };
   renderLaunch();
   try {
-    const res = await fetch("api/audits", { method: "POST" });
+    const res = await fetch("api/audits", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ project: $("project").value || auditData?.session.project }),
+    });
     const text = await res.text();
     launch = res.ok ? null : { error: text.trim() };
     if (res.ok) {
@@ -427,7 +432,7 @@ function renderAudit() {
 
   $("detailPane").replaceChildren(el("div", { className: "audit-page" },
     el("a", { className: "back", href: "#", textContent: "← All memories" }),
-    el("h2", { className: "title", textContent: "Audit with Claude Code" }),
+    el("h2", { className: "title", textContent: `Audit ${a.session.project}` }),
     el("div", { className: "audit-status" },
       badge("status" + (a.status === "done" ? " done" : ""), a.status),
       replyPending ? "Reply sent. Waiting for Claude to pick it up…" : statusText[a.status] || "",
@@ -541,6 +546,7 @@ async function load() {
 }
 
 for (const id of ["q", "project", "type", "issuesOnly"]) $(id).addEventListener("input", renderList);
+$("project").addEventListener("input", renderLaunch);
 window.addEventListener("hashchange", route);
 $("auditButton").onclick = onAuditButton;
 load();

@@ -28,7 +28,6 @@ var version = "dev"
 const usage = `Usage:
   cc-memory-view serve [flags]     browse memory in the browser
   cc-memory-view check [flags]     list audit candidates
-  cc-memory-view setup             prepare the workspace audit sessions run in
   cc-memory-view audit ...         used by the audit session to talk to the web UI
   cc-memory-view --version
 `
@@ -54,8 +53,6 @@ func main() {
 		err = serve(args)
 	case "check":
 		err = check(args)
-	case "setup":
-		err = setup()
 	case "audit":
 		err = auditCmd(args)
 	default:
@@ -113,8 +110,12 @@ func serve(args []string) error {
 		Root:       filepath.Join(configDir, "projects"),
 		StaleAfter: days(*staleDays),
 		Audits:     audit.Store{Dir: filepath.Join(auditDir, "audits")},
-		StartAudit: func(ctx context.Context, token string) (string, error) {
-			return audit.Start(ctx, audit.Params{Dir: auditDir, ConfigDir: configDir, Exe: exe, Token: token})
+		StartAudit: func(ctx context.Context, token, project string) (string, error) {
+			p, err := findProject(filepath.Join(configDir, "projects"), project)
+			if err != nil {
+				return "", err
+			}
+			return audit.Start(ctx, audit.Params{Dir: p.Path, ConfigDir: configDir, MemoryDir: filepath.Join(p.Dir, "memory"), Exe: exe, Token: token})
 		},
 	}
 	srv := &http.Server{Handler: s.Handler()}
@@ -129,20 +130,25 @@ func serve(args []string) error {
 	return nil
 }
 
+func findProject(root, name string) (*memory.Project, error) {
+	projects, err := memory.Load(root)
+	if err != nil {
+		return nil, err
+	}
+	for _, p := range projects {
+		if p.Name() == name && p.Path != "" {
+			return p, nil
+		}
+	}
+	return nil, fmt.Errorf("no project directory known for %s", name)
+}
+
 func openBrowser(url string) error {
 	name := "xdg-open"
 	if runtime.GOOS == "darwin" {
 		name = "open"
 	}
 	return exec.Command(name, url).Start()
-}
-
-func setup() error {
-	dir, err := audit.Dir()
-	if err != nil {
-		return err
-	}
-	return audit.Setup(dir)
 }
 
 func check(args []string) error {
