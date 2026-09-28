@@ -293,6 +293,10 @@ async function onAuditButton() {
     location.hash = "audit";
     return;
   }
+  await startAudit();
+}
+
+async function startAudit() {
   launch = { pending: true };
   renderLaunch();
   try {
@@ -389,6 +393,9 @@ function renderAudit() {
   const replyPending = a.status === "waiting" && lastReply && new Date(lastReply.time) > new Date(a.updated);
   const canReply = a.status === "waiting" && !replyPending;
   const attach = `claude attach ${a.session.id}`;
+  const restart = el("button", { className: "btn", textContent: "Start a new audit",
+    title: "Leaves this session as it is; stop it with claude stop if it's stuck" });
+  restart.onclick = startAudit;
 
   const message = el("textarea", { placeholder: "Message to Claude (optional)", value: draft.message, disabled: !canReply });
   message.dataset.key = "message";
@@ -429,7 +436,8 @@ function renderAudit() {
     el("div", { className: "audit-status" },
       badge("status" + (a.status === "done" ? " done" : ""), a.status),
       replyPending ? "Reply sent. Waiting for Claude to pick it up…" : statusText[a.status] || "",
-      el("span", { className: "attach" }, el("code", { textContent: attach }), copyButton(attach))),
+      el("span", { className: "attach" }, el("code", { textContent: attach }), copyButton(attach)),
+      restart),
     ...(a.messageHTML ? [html("card message md", a.messageHTML)] : []),
     ...(a.suggestions.length ? [el("span", { className: "label section-label", textContent: `Suggestions (${a.suggestions.filter((s) => s.open).length} open)` }),
       ...a.suggestions.map((sg) => suggestionCard(sg, canReply))] : []),
