@@ -54,9 +54,8 @@ accepted. You can also continue it in a terminal with `claude attach <id>`.
 Only same-origin requests to a loopback or `*.localhost` host can start or
 reply to it.
 
-The session talks to the web UI through `cc-memory-view audit post`, `audit
-watch` and `audit rm` (which deletes only memory files other than
-`MEMORY.md`). It starts with those commands allowed, `--permission-mode
+The session talks to the web UI through `cc-memory-view audit post` and
+`audit watch`. It starts with those commands and `rm` allowed, `--permission-mode
 acceptEdits` and the Claude config directory added, so it runs without
 permission prompts.
 

@@ -29,7 +29,7 @@ func TestStart(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	id, err := Start(context.Background(), Params{Dir: dir, ConfigDir: "/cfg", Exe: "/bin/cc-memory-view", StaleDays: 30, Token: "aaaabbbbccccdddd"})
+	id, err := Start(context.Background(), Params{Dir: dir, ConfigDir: "/cfg", Exe: "/bin/cc-memory-view", Token: "aaaabbbbccccdddd"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -50,9 +50,8 @@ func TestStart(t *testing.T) {
 		t.Errorf("first arg = %q", lines[1])
 	}
 	for _, want := range []string{
-		"`/bin/cc-memory-view check --json --stale-days 30`",
 		"`/bin/cc-memory-view audit watch aaaabbbbccccdddd`",
-		"--permission-mode\nacceptEdits\n--add-dir\n/cfg\n--allowedTools\nRead,Glob,Grep,Monitor,Bash(/bin/cc-memory-view check:*),Bash(/bin/cc-memory-view audit:*)\n",
+		"--permission-mode\nacceptEdits\n--add-dir\n/cfg\n--allowedTools\nRead,Glob,Grep,Monitor,Bash(/bin/cc-memory-view audit:*),Bash(rm:*)\n",
 	} {
 		if !strings.Contains(args, want) {
 			t.Errorf("claude args lack %q:\n%s", want, args)

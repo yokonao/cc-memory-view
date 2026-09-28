@@ -3,8 +3,6 @@ package audit
 import (
 	"bytes"
 	"context"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -111,41 +109,5 @@ func TestInvalidToken(t *testing.T) {
 		if err := s.Post(tok, strings.NewReader(`{"status": "done"}`)); err == nil {
 			t.Errorf("posted to %q", tok)
 		}
-	}
-}
-
-func TestRemove(t *testing.T) {
-	cfg := t.TempDir()
-	mem := filepath.Join(cfg, "projects", "-p", "memory")
-	for _, f := range []string{"a.md", "MEMORY.md", "notes.txt"} {
-		write(t, filepath.Join(mem, f))
-	}
-	write(t, filepath.Join(cfg, "CLAUDE.md"))
-
-	for _, bad := range []string{
-		filepath.Join(mem, "MEMORY.md"),
-		filepath.Join(mem, "notes.txt"),
-		filepath.Join(cfg, "CLAUDE.md"),
-		filepath.Join(mem, "..", "memory", "..", "..", "..", "CLAUDE.md"),
-	} {
-		if err := Remove(cfg, bad); err == nil {
-			t.Errorf("removed %s", bad)
-		}
-	}
-	if err := Remove(cfg, filepath.Join(mem, "a.md")); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := os.Stat(filepath.Join(mem, "a.md")); !os.IsNotExist(err) {
-		t.Error("a.md still exists")
-	}
-}
-
-func write(t *testing.T, path string) {
-	t.Helper()
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(path, nil, 0o644); err != nil {
-		t.Fatal(err)
 	}
 }

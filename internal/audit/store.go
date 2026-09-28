@@ -359,25 +359,3 @@ func readLines(path string) ([][]byte, error) {
 	}
 	return lines, sc.Err()
 }
-
-// Remove deletes a memory file on the session's behalf. It only accepts a
-// .md file directly in a project's memory directory, other than MEMORY.md.
-func Remove(configDir, file string) error {
-	file = filepath.Clean(file)
-	rel, err := filepath.Rel(filepath.Join(configDir, "projects"), file)
-	if err != nil {
-		return err
-	}
-	parts := strings.Split(filepath.ToSlash(rel), "/")
-	if len(parts) != 3 || parts[0] == ".." || parts[1] != "memory" || filepath.Ext(parts[2]) != ".md" || parts[2] == "MEMORY.md" {
-		return fmt.Errorf("%s is not a memory file", file)
-	}
-	info, err := os.Lstat(file)
-	if err != nil {
-		return err
-	}
-	if !info.Mode().IsRegular() {
-		return fmt.Errorf("%s is not a regular file", file)
-	}
-	return os.Remove(file)
-}

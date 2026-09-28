@@ -114,7 +114,7 @@ func serve(args []string) error {
 		StaleAfter: days(*staleDays),
 		Audits:     audit.Store{Dir: filepath.Join(auditDir, "audits")},
 		StartAudit: func(ctx context.Context, token string) (string, error) {
-			return audit.Start(ctx, audit.Params{Dir: auditDir, ConfigDir: configDir, Exe: exe, StaleDays: *staleDays, Token: token})
+			return audit.Start(ctx, audit.Params{Dir: auditDir, ConfigDir: configDir, Exe: exe, Token: token})
 		},
 	}
 	srv := &http.Server{Handler: s.Handler()}
