@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Changed
+
+- The home page lists projects with their latest audit, and audits of different projects run in parallel. The header's audit button is gone: start an audit from the project list.
+
 ## v0.0.2 - 2026-09-29
 
 ### Changed
