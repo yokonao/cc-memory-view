@@ -75,4 +75,8 @@ golangci-lint fmt
 ```
 
 `air` rebuilds and restarts `serve` on http://127.0.0.1:8080/ whenever a Go
-or HTML file changes.
+or HTML file changes. Flags after `--` override it, e.g. to avoid a port clash:
+
+```sh
+air -- --addr unix:///tmp/cc-memory-view.sock
+```
