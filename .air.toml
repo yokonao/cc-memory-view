@@ -1,4 +1,6 @@
 [build]
   cmd = "go build -o ./tmp/cc-memory-view ./cmd/cc-memory-view"
   entrypoint = ["./tmp/cc-memory-view"]
-  args_bin = ["serve", "--no-open", "--addr", "127.0.0.1:8080"]
+  args_bin = ["serve", "--addr", "unix:///tmp/cc-memory-view.sock"]
+  send_interrupt = true
+  kill_delay = "1s"

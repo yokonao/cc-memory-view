@@ -74,5 +74,12 @@ golangci-lint run
 golangci-lint fmt
 ```
 
-`air` rebuilds and restarts `serve` on http://127.0.0.1:8080/ whenever a Go
-or HTML file changes.
+`air` rebuilds and restarts `serve` whenever a Go or HTML file changes. It
+listens on `unix:///tmp/cc-memory-view.sock` so it doesn't take a port from
+other projects; open it through [devproxy](https://github.com/yokonao/devproxy)
+with a route such as:
+
+```yaml
+routes:
+  memory: unix:///tmp/cc-memory-view.sock
+```
