@@ -102,7 +102,7 @@ func Prompt(p Params) string {
 
 Steps:
 1. Run the check, read every memory file under %[5]s, and post your suggestions with status "waiting". Suggest promoting to %[6]s when the same rule appears in several projects.
-2. Start the Monitor tool with %[3]s as its command and persistent: true, and keep it running. Its events are my replies.
+2. Start the Monitor tool with %[3]s as its command and the longest timeout it allows. Its events are my replies. Whenever it expires before you post status "done", start it again: it resumes where it left off, so no reply is repeated or lost.
 3. Don't change any file until a reply accepts it. On each reply, post status "working", apply the accepted suggestions (taking comments into account, and keeping each project's MEMORY.md in sync), then post the full list again with statuses updated and status "waiting", or "done" when I say we're finished.`,
 		cmd(fmt.Sprintf("check --json --stale-days %d", p.StaleDays)),
 		cmd("audit post "+p.Token),
