@@ -44,7 +44,7 @@ func serve(ctx context.Context, addr string, open bool, staleDays int) error {
 	if err != nil {
 		return err
 	}
-	ln, err := listen(addr)
+	ln, err := web.Listen(addr)
 	if err != nil {
 		return err
 	}

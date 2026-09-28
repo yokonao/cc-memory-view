@@ -1,4 +1,4 @@
-package main
+package web
 
 import (
 	"errors"
@@ -11,9 +11,9 @@ import (
 	"strings"
 )
 
-// listen listens on a TCP address, or on a Unix socket given as
+// Listen listens on a TCP address, or on a Unix socket given as
 // unix:///absolute/path in the form devproxy uses for its targets.
-func listen(addr string) (net.Listener, error) {
+func Listen(addr string) (net.Listener, error) {
 	if !strings.HasPrefix(addr, "unix:") {
 		return net.Listen("tcp", addr)
 	}
