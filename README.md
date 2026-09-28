@@ -73,3 +73,6 @@ go test ./...
 golangci-lint run
 golangci-lint fmt
 ```
+
+`air` rebuilds and restarts `serve` on http://127.0.0.1:8080/ whenever a Go
+or HTML file changes.
