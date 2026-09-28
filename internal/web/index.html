@@ -96,6 +96,13 @@
   .audit-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; margin-bottom: 12px; }
   .audit-note { font-size: 0.88rem; color: var(--faint); overflow-wrap: anywhere; }
   .audit-note code { font-family: var(--mono); font-size: 0.85em; }
+  .launch { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--border); }
+  .btn.primary { padding: 9px 16px; background: var(--accent); border-color: var(--accent); color: #fff; font-size: 0.95rem; font-weight: 600; }
+  .btn.primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); color: #fff; }
+  .btn:disabled { opacity: 0.6; cursor: default; }
+  .launch-result { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 0.92rem; color: var(--muted); }
+  .launch-result code { font-family: var(--mono); font-size: 0.88rem; color: var(--ink); background: var(--surface-2); border: 1px solid var(--border); border-radius: 6px; padding: 2px 8px; }
+  .launch-result.error { color: var(--warn); }
   .stats { display: flex; flex-wrap: wrap; gap: 10px 32px; }
   .stat { display: flex; flex-direction: column; }
   .stat-num { font-family: var(--mono); font-size: 1.4rem; font-weight: 600; }
@@ -211,7 +218,7 @@ function auditCard() {
   const stat = (n, label, warn) => el("div", { className: "stat" },
     el("span", { className: "stat-num" + (warn && n ? " warn" : ""), textContent: n }),
     el("span", { className: "label", textContent: label }));
-  const note = el("span", { className: "audit-note" }, "Hand these to Claude Code with ", el("code", { textContent: "cc-memory-view check --json" }));
+  const note = el("span", { className: "audit-note" }, "Rule-based candidates. Claude Code decides with you what to keep, merge or delete.");
   return el("section", { className: "card audit" },
     el("div", { className: "audit-head" }, el("span", { className: "label", textContent: "Audit" }), note),
     el("div", { className: "stats" },
@@ -219,7 +226,42 @@ function auditCard() {
       stat(data.memories.length, "Memories"),
       stat(data.issues.length, "Issues", true)),
     ...(Object.keys(counts).length ? [el("div", { className: "kinds" }, ...Object.entries(counts).map(([k, n]) => badge("issue", `${k} ${n}`)))] : []),
-    ...(projectIssues.length ? [issueList(projectIssues, true)] : []));
+    ...(projectIssues.length ? [issueList(projectIssues, true)] : []),
+    launchPanel());
+}
+
+let launch = null;
+
+function launchPanel() {
+  const button = el("button", { className: "btn primary", textContent: "Audit with Claude Code", disabled: launch?.pending });
+  const result = el("div", { className: "launch-result" });
+  if (launch?.pending) {
+    result.textContent = "Starting a background session…";
+  } else if (launch?.error) {
+    result.classList.add("error");
+    result.textContent = launch.error;
+  } else if (launch?.id) {
+    const cmd = `claude attach ${launch.id}`;
+    result.append("Started in the background. Continue it with", el("code", { textContent: cmd }), copyButton(cmd));
+  } else {
+    result.textContent = "Starts claude --bg in your Claude config directory.";
+  }
+  button.onclick = startAudit;
+  return el("div", { className: "launch", id: "launch" }, button, result);
+}
+
+async function startAudit() {
+  const redraw = () => $("launch")?.replaceWith(launchPanel());
+  launch = { pending: true };
+  redraw();
+  try {
+    const res = await fetch("api/audit", { method: "POST" });
+    const text = await res.text();
+    launch = res.ok ? JSON.parse(text) : { error: text.trim() };
+  } catch (e) {
+    launch = { error: String(e) };
+  }
+  redraw();
 }
 
 function renderList() {

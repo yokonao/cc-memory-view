@@ -17,6 +17,7 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/yokonao/cc-memory-view/internal/audit"
 	"github.com/yokonao/cc-memory-view/internal/memory"
 	"github.com/yokonao/cc-memory-view/internal/web"
 )
@@ -71,7 +72,11 @@ func serve(args []string) error {
 	staleDays := staleFlag(fs)
 	_ = fs.Parse(args)
 
-	root, err := memory.Root()
+	configDir, err := memory.ConfigDir()
+	if err != nil {
+		return err
+	}
+	exe, err := os.Executable()
 	if err != nil {
 		return err
 	}
@@ -93,7 +98,14 @@ func serve(args []string) error {
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	srv := &http.Server{Handler: (&web.Server{Root: root, StaleAfter: days(*staleDays)}).Handler()}
+	s := &web.Server{
+		Root:       filepath.Join(configDir, "projects"),
+		StaleAfter: days(*staleDays),
+		StartAudit: func(ctx context.Context) (string, error) {
+			return audit.Start(ctx, audit.Params{ConfigDir: configDir, Exe: exe, StaleDays: *staleDays})
+		},
+	}
+	srv := &http.Server{Handler: s.Handler()}
 	go func() {
 		<-ctx.Done()
 		// Closing the listener also removes the Unix socket.
