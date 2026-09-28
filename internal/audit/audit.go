@@ -6,15 +6,48 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
 )
 
+// errSetup tells the user how to fix a missing or untrusted workspace.
+var errSetup = errors.New("the audit workspace isn't set up: run `cc-memory-view setup`")
+
+// Dir returns the workspace audit sessions run in:
+// $XDG_DATA_HOME/cc-memory-view, falling back to ~/.local/share.
+func Dir() (string, error) {
+	dir := os.Getenv("XDG_DATA_HOME")
+	if dir == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "", err
+		}
+		dir = filepath.Join(home, ".local", "share")
+	}
+	return filepath.Join(dir, "cc-memory-view"), nil
+}
+
+// Setup creates the workspace and runs claude there interactively, so the
+// user can accept the workspace trust prompt that `claude --bg` requires.
+func Setup(dir string) error {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	fmt.Printf("Starting claude in %s.\nAccept the trust prompt if asked, then type /exit.\n\n", dir)
+	cmd := exec.Command("claude")
+	cmd.Dir = dir
+	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
+	return cmd.Run()
+}
+
 type Params struct {
-	// ConfigDir is Claude Code's configuration directory. The session runs
-	// there, so it must be a trusted workspace.
+	// Dir is the trusted workspace the session runs in.
+	Dir string
+	// ConfigDir is Claude Code's configuration directory.
 	ConfigDir string
 	// Exe is the cc-memory-view binary the session runs for check.
 	Exe       string
@@ -41,11 +74,17 @@ var (
 
 // Start runs `claude --bg` and returns the session ID it prints.
 func Start(ctx context.Context, p Params) (string, error) {
+	if _, err := os.Stat(p.Dir); errors.Is(err, fs.ErrNotExist) {
+		return "", errSetup
+	}
 	cmd := exec.CommandContext(ctx, "claude", "--bg", Prompt(p))
-	cmd.Dir = p.ConfigDir
+	cmd.Dir = p.Dir
 	out, err := cmd.CombinedOutput()
 	text := strings.TrimSpace(ansiRe.ReplaceAllString(string(out), ""))
 	if err != nil {
+		if strings.Contains(text, "not trusted") {
+			return "", errSetup
+		}
 		if text == "" {
 			return "", err
 		}
