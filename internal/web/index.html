@@ -66,9 +66,14 @@
   header h1 a:hover { text-decoration: none; }
   header .sub { font-size: 0.85rem; color: var(--muted); }
 
-  .container { max-width: 1080px; margin: 0 auto; padding: 40px 24px 80px; }
+  body { height: 100vh; display: flex; flex-direction: column; }
+  header { flex: none; }
+  .panes { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(360px, 2fr) 3fr; }
+  #listPane { overflow: auto; padding: 24px 20px 40px 28px; border-right: 1px solid var(--border); }
+  #detailPane { overflow: auto; padding: 32px 40px 60px; }
+  #detailPane > * { max-width: 860px; }
 
-  .toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 20px; }
+  .toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 16px; }
   input[type=search], select {
     padding: 10px 14px;
     border: 1px solid var(--border-strong); border-radius: 10px;
@@ -87,7 +92,7 @@
   .card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; }
   .label { font-size: 0.72rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
 
-  .audit { padding: 20px 24px; margin-bottom: 28px; }
+  .audit { padding: 20px 24px; }
   .audit-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; margin-bottom: 12px; }
   .audit-note { font-size: 0.88rem; color: var(--faint); overflow-wrap: anywhere; }
   .audit-note code { font-family: var(--mono); font-size: 0.85em; }
@@ -100,7 +105,8 @@
   .list { overflow: hidden; }
   .row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 20px; padding: 16px 22px; border-bottom: 1px solid var(--border); color: inherit; transition: background 0.12s; }
   .row:last-child { border-bottom: none; }
-  .row:hover { background: var(--accent-soft); color: inherit; text-decoration: none; }
+  .row:hover, .row.selected { background: var(--accent-soft); color: inherit; text-decoration: none; }
+  .row.selected { box-shadow: inset 3px 0 0 var(--accent); }
   .row-name { font-weight: 600; font-size: 1.02rem; }
   .row-desc { grid-column: 1; color: var(--muted); font-size: 0.95rem; }
   .row-meta { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 0.85rem; color: var(--faint); overflow-wrap: anywhere; min-width: 0; }
@@ -111,7 +117,7 @@
   .badge.type { background: var(--code-bg); border-color: var(--code-bg); color: var(--code-ink); }
   .badge.issue { background: var(--warn-soft); border-color: transparent; color: var(--warn); }
 
-  .back { display: inline-block; margin-bottom: 20px; font-size: 0.95rem; color: var(--muted); }
+  .back { display: none; margin-bottom: 20px; font-size: 0.95rem; color: var(--muted); }
   .back:hover { color: var(--accent); }
   .title { font-family: var(--serif); font-size: 2.1rem; font-weight: 600; letter-spacing: -0.015em; line-height: 1.25; margin-bottom: 8px; }
   .desc { font-size: 1.1rem; color: var(--muted); margin-bottom: 24px; }
@@ -141,9 +147,15 @@
   .md pre code { background: none; border: none; padding: 0; color: var(--code-ink); font-size: 0.88rem; }
   .md blockquote { border-left: 3px solid var(--border-strong); padding-left: 14px; color: var(--muted); }
 
-  @media (max-width: 640px) {
+  @media (max-width: 800px) {
+    body { height: auto; display: block; }
     header { padding: 14px 16px; }
-    .container { padding: 24px 16px 60px; }
+    .panes { display: flex; flex-direction: column; }
+    #listPane { padding: 20px 16px 40px; border-right: 0; }
+    #detailPane { order: -1; padding: 20px 16px 0; }
+    .selected-memory #listPane { display: none; }
+    .selected-memory #detailPane { padding-bottom: 60px; }
+    .selected-memory .back { display: inline-block; }
     .md { padding: 20px; }
     .title { font-size: 1.7rem; }
   }
@@ -155,9 +167,8 @@
   <h1><a href="#">cc-memory-view</a></h1>
   <span class="sub">Claude Code Memory</span>
 </header>
-<div class="container">
-  <div id="listView">
-    <section class="card audit" id="audit"></section>
+<div class="panes">
+  <div id="listPane">
     <div class="toolbar">
       <input type="search" id="q" placeholder="Search memory">
       <select id="project"><option value="">All projects</option></select>
@@ -167,7 +178,7 @@
     </div>
     <div class="card list" id="list"></div>
   </div>
-  <div id="detailView" hidden></div>
+  <div id="detailPane"></div>
 </div>
 <script>
 let data = { memories: [], issues: [] };
@@ -192,7 +203,7 @@ function issueList(issues, withProject) {
     el("li", {}, el("b", { textContent: i.kind }), withProject ? `${i.project} — ${i.detail}` : i.detail)));
 }
 
-function renderAudit() {
+function auditCard() {
   const files = new Set(data.memories.map((m) => m.file));
   const projectIssues = data.issues.filter((i) => !files.has(i.file));
   const counts = {};
@@ -201,7 +212,7 @@ function renderAudit() {
     el("span", { className: "stat-num" + (warn && n ? " warn" : ""), textContent: n }),
     el("span", { className: "label", textContent: label }));
   const note = el("span", { className: "audit-note" }, "Hand these to Claude Code with ", el("code", { textContent: "cc-memory-view check --json" }));
-  $("audit").replaceChildren(
+  return el("section", { className: "card audit" },
     el("div", { className: "audit-head" }, el("span", { className: "label", textContent: "Audit" }), note),
     el("div", { className: "stats" },
       stat(new Set(data.memories.map((m) => m.project)).size, "Projects"),
@@ -223,7 +234,8 @@ function renderList() {
     $("list").replaceChildren(el("div", { className: "empty", textContent: "No memories match." }));
     return;
   }
-  $("list").replaceChildren(...ms.map((m) => el("a", { className: "row", href: "#" + m.id },
+  const id = current();
+  $("list").replaceChildren(...ms.map((m) => el("a", { className: "row" + (m.id === id ? " selected" : ""), href: "#" + m.id },
     el("span", { className: "row-name", textContent: m.name }),
     el("span", { className: "ts", textContent: date(m.modified) }),
     el("span", { className: "row-desc", textContent: m.description }),
@@ -243,7 +255,7 @@ function renderDetail(m) {
   const row = (label, ...value) => [el("span", { className: "label", textContent: label }), el("span", { className: "meta-value" }, ...value)];
   const body = el("div", { className: "card md" });
   body.innerHTML = m.html;
-  $("detailView").replaceChildren(
+  $("detailPane").replaceChildren(
     el("a", { className: "back", href: "#", textContent: "← All memories" }),
     el("h2", { className: "title", textContent: m.name }),
     el("p", { className: "desc", textContent: m.description }),
@@ -256,13 +268,16 @@ function renderDetail(m) {
     body);
 }
 
+const current = () => decodeURIComponent(location.hash.slice(1));
+
 function route() {
-  const id = decodeURIComponent(location.hash.slice(1));
-  const m = data.memories.find((m) => m.id === id);
-  $("listView").hidden = !!m;
-  $("detailView").hidden = !m;
+  const m = data.memories.find((m) => m.id === current());
+  document.body.classList.toggle("selected-memory", !!m);
   if (m) renderDetail(m);
-  window.scrollTo(0, 0);
+  else $("detailPane").replaceChildren(auditCard());
+  renderList();
+  $("detailPane").scrollTop = 0;
+  if (m && matchMedia("(max-width: 800px)").matches) window.scrollTo(0, 0);
 }
 
 async function load() {
@@ -274,8 +289,6 @@ async function load() {
   data = await res.json();
   fillSelect($("project"), data.memories.map((m) => m.project));
   fillSelect($("type"), data.memories.map((m) => m.type).filter(Boolean));
-  renderAudit();
-  renderList();
   route();
 }
 
