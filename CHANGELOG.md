@@ -5,6 +5,7 @@
 ### Changed
 
 - Audit sessions run in auto mode instead of `acceptEdits`, so a command outside the allowlist no longer waits for a permission prompt nobody sees.
+- The home page lists projects with their latest audit, and audits of different projects run in parallel. The header's audit button is gone: start an audit from the project list.
 
 ## v0.0.2 - 2026-09-29
 

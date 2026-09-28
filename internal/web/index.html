@@ -96,7 +96,6 @@
   .audit-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; margin-bottom: 12px; }
   .audit-note { font-size: 0.88rem; color: var(--faint); overflow-wrap: anywhere; }
   .audit-note code { font-family: var(--mono); font-size: 0.85em; }
-  header .btn.primary { margin-left: auto; align-self: center; }
   #launchBar { flex: none; display: flex; align-items: center; gap: 10px; padding: 10px 28px; background: var(--surface); border-bottom: 1px solid var(--border); }
   #launchBar[hidden] { display: none; }
   #launchBar .launch-result { flex: 1; }
@@ -122,6 +121,11 @@
   .row-name { font-weight: 600; font-size: 1.02rem; }
   .row-desc { grid-column: 1; color: var(--muted); font-size: 0.95rem; }
   .row-meta { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 0.85rem; color: var(--faint); overflow-wrap: anywhere; min-width: 0; }
+  .projects { margin-top: 20px; }
+  .projects .row { align-items: center; }
+  .projects .row:hover { background: none; }
+  .link { border: 0; background: none; padding: 0; color: inherit; font-family: inherit; text-align: left; cursor: pointer; overflow-wrap: anywhere; }
+  .link:hover { color: var(--accent); }
   .ts { color: var(--faint); font-size: 0.85rem; white-space: nowrap; }
   .empty { padding: 48px; text-align: center; color: var(--faint); font-style: italic; }
 
@@ -214,7 +218,6 @@
   <span class="mark" aria-hidden="true"></span>
   <h1><a href="#">cc-memory-view</a></h1>
   <span class="sub">Claude Code Memory</span>
-  <button class="btn primary" id="auditButton" title="Starts claude --bg in the project selected below">Audit with Claude Code</button>
 </header>
 <div id="launchBar" hidden></div>
 <div class="panes">
@@ -268,79 +271,94 @@ function auditCard() {
     ...(projectIssues.length ? [issueList(projectIssues, true)] : []));
 }
 
-let launch = null;
-let latest = null;
-let auditData = null;
-let auditJSON = "";
-const draft = { token: null, decisions: {}, message: "" };
+function projectsCard() {
+  const projects = [...new Set([...data.memories, ...data.issues].map((x) => x.project))].sort();
+  return el("section", { className: "card list projects" }, ...projects.map((p) => {
+    const a = latestAudit(p);
+    const active = a && a.status !== "done";
+    const memories = data.memories.filter((m) => m.project === p).length;
+    const issues = data.issues.filter((i) => i.project === p).length;
+    const name = el("button", { className: "link row-name", textContent: p, title: "Show its memories" });
+    name.onclick = () => { $("project").value = p; renderList(); };
+    const action = active
+      ? el("a", { className: "btn", href: "#audit/" + a.session.token, textContent: "Open audit" })
+      : el("button", { className: "btn", textContent: starting.has(p) ? "Starting…" : "Audit", disabled: starting.has(p) });
+    if (!active) action.onclick = () => startAudit(p);
+    return el("div", { className: "row" }, name, action,
+      el("span", { className: "row-meta" }, memories === 1 ? "1 memory" : `${memories} memories`,
+        ...(issues ? [badge("issue", `${issues} issues`)] : []),
+        ...(a ? [el("a", { href: "#audit/" + a.session.token }, badge("status" + (active ? "" : " done"), "audit " + a.status))] : [])));
+  }));
+}
+
+let audits = [];
+let auditsJSON = "";
+const details = {};
+const drafts = {};
+const starting = new Set();
+let launchError = "";
+const latestAudit = (project) => audits.find((a) => a.session.project === project);
+const auditOf = (project) => details[latestAudit(project)?.session.token]?.audit;
 
 function renderLaunch() {
-  const active = latest && latest.status !== "done";
-  const project = $("project").value;
-  $("auditButton").textContent = active ? "Open audit" : project ? `Audit ${project}` : "Choose a project to audit";
-  $("auditButton").disabled = !!launch?.pending || !active && !project;
-  $("launchBar").hidden = !launch;
-  if (!launch) return;
-  const result = el("div", { className: "launch-result" + (launch.error ? " error" : ""),
-    textContent: launch.pending ? "Starting a background session…" : launch.error });
-  const dismiss = el("button", { className: "dismiss", textContent: "×", title: "Dismiss", hidden: launch.pending });
-  dismiss.onclick = () => { launch = null; renderLaunch(); };
-  $("launchBar").replaceChildren(result, dismiss);
+  $("launchBar").hidden = !launchError;
+  const dismiss = el("button", { className: "dismiss", textContent: "×", title: "Dismiss" });
+  dismiss.onclick = () => { launchError = ""; renderLaunch(); };
+  $("launchBar").replaceChildren(el("div", { className: "launch-result error", textContent: launchError }), dismiss);
 }
 
-async function onAuditButton() {
-  if (latest && latest.status !== "done") {
-    location.hash = "audit";
-    return;
-  }
-  await startAudit();
-}
-
-async function startAudit() {
-  launch = { pending: true };
+async function startAudit(project) {
+  starting.add(project);
+  launchError = "";
   renderLaunch();
+  route(false);
   try {
     const res = await fetch("api/audits", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ project: $("project").value || auditData?.session.project }),
+      body: JSON.stringify({ project }),
     });
-    const text = await res.text();
-    launch = res.ok ? null : { error: text.trim() };
     if (res.ok) {
+      const { token } = await res.json();
       await poll();
-      location.hash = "audit";
+      location.hash = "audit/" + token;
+    } else {
+      launchError = (await res.text()).trim();
     }
   } catch (e) {
-    launch = { error: String(e) };
+    launchError = String(e);
   }
+  starting.delete(project);
   renderLaunch();
+  route(false);
 }
 
-// poll refreshes the latest audit, and the memory list after Claude changed
-// something.
+// poll refreshes the audits, loading the latest one of each project and the
+// one on screen, and the memory list after Claude changed something.
 async function poll() {
   try {
-    const list = await (await fetch("api/audits")).json();
-    latest = list[0] || null;
-    renderLaunch();
-    if (!latest) return;
-    const res = await fetch("api/audits/" + latest.session.token);
-    const text = await res.text();
-    if (!res.ok || text === auditJSON) return;
-    const prev = auditData;
-    auditJSON = text;
-    auditData = JSON.parse(text);
-    if (draft.token !== auditData.session.token) Object.assign(draft, { token: auditData.session.token, decisions: {}, message: "" });
-    if (prev && prev.updated !== auditData.updated) await loadData();
-    else if (current() === "audit" || memoryOfSuggestion()) route(false);
+    const text = await (await fetch("api/audits")).text();
+    let changed = text !== auditsJSON;
+    let reload = false;
+    auditsJSON = text;
+    audits = JSON.parse(text);
+    const tokens = new Set(audits.filter((a) => a === latestAudit(a.session.project)).map((a) => a.session.token));
+    if (auditToken()) tokens.add(auditToken());
+    await Promise.all([...tokens].map(async (token) => {
+      const res = await fetch("api/audits/" + token);
+      const text = await res.text();
+      if (!res.ok || details[token]?.text === text) return;
+      const audit = JSON.parse(text);
+      if (details[token] && details[token].audit.updated !== audit.updated) reload = true;
+      details[token] = { text, audit };
+      changed = true;
+    }));
+    if (reload) await loadData();
+    else if (changed) route(false);
   } catch {
     // Keep showing the last known state; the next poll retries.
   }
 }
-
-const memoryOfSuggestion = () => auditData?.suggestions.some((sg) => sg.memoryIDs.includes(current()));
-
 const statusText = {
   starting: "Claude is starting and reading your memory…",
   working: "Claude is working…",
@@ -359,12 +377,12 @@ function html(cls, markup) {
   return e;
 }
 
-function suggestionCard(sg, canReply) {
+function suggestionCard(sg, canReply, draft, rerender) {
   const d = draft.decisions[sg.id] || {};
   const approve = el("button", { className: "btn choice" + (d.approved ? " active" : ""), textContent: "Approve" });
   approve.onclick = () => {
     draft.decisions[sg.id] = { ...d, approved: !d.approved };
-    renderAudit();
+    rerender();
   };
   const comment = el("input", { type: "text", placeholder: "Comment", value: d.comment || "" });
   comment.dataset.key = "comment-" + sg.id;
@@ -380,12 +398,13 @@ function suggestionCard(sg, canReply) {
     ...(sg.open && canReply ? [el("div", { className: "choices" }, approve, comment)] : []));
 }
 
-function renderAudit() {
-  const a = auditData;
+function renderAudit(token) {
+  const a = details[token]?.audit;
   if (!a) {
-    $("detailPane").replaceChildren(el("p", { className: "empty", textContent: "No audit yet. Start one with the button above." }));
+    $("detailPane").replaceChildren(el("p", { className: "empty", textContent: "Loading the audit…" }));
     return;
   }
+  const draft = drafts[token] ||= { decisions: {}, message: "" };
   const focused = document.activeElement?.dataset?.key;
   const selection = focused && [document.activeElement.selectionStart, document.activeElement.selectionEnd];
 
@@ -395,7 +414,7 @@ function renderAudit() {
   const attach = `claude attach ${a.session.id}`;
   const restart = el("button", { className: "btn", textContent: "Start a new audit",
     title: "Leaves this session as it is; stop it with claude stop if it's stuck" });
-  restart.onclick = startAudit;
+  restart.onclick = () => startAudit(a.session.project);
 
   const message = el("textarea", { placeholder: "Message to Claude (optional)", value: draft.message, disabled: !canReply });
   message.dataset.key = "message";
@@ -440,7 +459,7 @@ function renderAudit() {
       restart),
     ...(a.messageHTML ? [html("card message md", a.messageHTML)] : []),
     ...(a.suggestions.length ? [el("span", { className: "label section-label", textContent: `Suggestions (${a.suggestions.filter((s) => s.open).length} open)` }),
-      ...a.suggestions.map((sg) => suggestionCard(sg, canReply))] : []),
+      ...a.suggestions.map((sg) => suggestionCard(sg, canReply, draft, () => renderAudit(token)))] : []),
     ...(a.status !== "done" ? [el("span", { className: "label section-label", textContent: "Reply" }), message,
       el("div", { className: "send" }, send, sendNote)] : []),
     ...(a.replies.length ? [el("span", { className: "label section-label", textContent: "Your replies" }),
@@ -499,25 +518,27 @@ function renderDetail(m) {
       ...row("Modified", new Date(m.modified).toLocaleString()),
       ...row("File", el("span", { className: "path" }, el("span", { textContent: m.file }), copyButton(m.file)))),
     ...(m.issues?.length ? [issueList(m.issues, false)] : []),
-    ...(auditData?.suggestions.filter((sg) => sg.open && sg.memoryIDs.includes(m.id)).map((sg) =>
+    ...(auditOf(m.project)?.suggestions.filter((sg) => sg.open && sg.memoryIDs.includes(m.id)).map((sg) =>
       el("div", { className: "callout" }, el("span", { className: "label", textContent: "Claude suggests" }), badge("action " + sg.action, sg.action),
-        html("md", sg.reasonHTML), el("a", { href: "#audit", textContent: "Open audit →" }))) || []),
+        html("md", sg.reasonHTML), el("a", { href: "#audit/" + latestAudit(m.project).session.token, textContent: "Open audit →" }))) || []),
     body);
 }
 
 const current = () => decodeURIComponent(location.hash.slice(1));
+const auditToken = () => current().match(/^audit\/([0-9a-f]{16})$/)?.[1];
 
 function route(scroll = true) {
   const id = current();
   const m = data.memories.find((m) => m.id === id);
-  document.body.classList.toggle("selected-memory", !!m || id === "audit");
+  const token = auditToken();
+  document.body.classList.toggle("selected-memory", !!m || !!token);
   if (m) renderDetail(m);
-  else if (id === "audit") renderAudit();
-  else $("detailPane").replaceChildren(auditCard());
+  else if (token) renderAudit(token);
+  else $("detailPane").replaceChildren(auditCard(), projectsCard());
   renderList();
   if (!scroll) return;
   $("detailPane").scrollTop = 0;
-  if ((m || id === "audit") && matchMedia("(max-width: 800px)").matches) window.scrollTo(0, 0);
+  if ((m || token) && matchMedia("(max-width: 800px)").matches) window.scrollTo(0, 0);
 }
 
 function fillSelect(select, values) {
@@ -546,9 +567,10 @@ async function load() {
 }
 
 for (const id of ["q", "project", "type", "issuesOnly"]) $(id).addEventListener("input", renderList);
-$("project").addEventListener("input", renderLaunch);
-window.addEventListener("hashchange", route);
-$("auditButton").onclick = onAuditButton;
+window.addEventListener("hashchange", () => {
+  route();
+  if (auditToken() && !details[auditToken()]) poll();
+});
 load();
 </script>
 </body>
