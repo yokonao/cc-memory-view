@@ -69,10 +69,9 @@ Steps:
 		filepath.Join(p.ConfigDir, "skills"))
 }
 
-// allowedTools lets the session work in the background without permission
-// prompts: reading, the cc-memory-view commands, rm, read-only gh and
-// Monitor. Edits are accepted by the permission mode, within the project and
-// ConfigDir.
+// allowedTools pre-approves what the session needs: reading, the
+// cc-memory-view commands, rm, read-only gh and Monitor. Anything else is left
+// to auto mode, within the project and ConfigDir.
 func allowedTools(p Params) string {
 	return strings.Join([]string{
 		"Read", "Glob", "Grep", "Monitor",
@@ -96,7 +95,7 @@ func Start(ctx context.Context, p Params) (string, error) {
 	}
 	// The prompt goes first: --add-dir and --allowedTools take several values.
 	cmd := exec.CommandContext(ctx, "claude", "--bg", Prompt(p),
-		"--permission-mode", "acceptEdits",
+		"--permission-mode", "auto",
 		"--add-dir", p.ConfigDir,
 		"--allowedTools", allowedTools(p))
 	cmd.Dir = p.Dir
