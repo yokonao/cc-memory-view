@@ -134,7 +134,7 @@
   .badge.type { background: var(--code-bg); border-color: var(--code-bg); color: var(--code-ink); }
   .badge.issue { background: var(--warn-soft); border-color: transparent; color: var(--warn); }
 
-  .back { display: none; margin-bottom: 20px; font-size: 0.95rem; color: var(--muted); }
+  .back { display: inline-block; margin-bottom: 20px; font-size: 0.95rem; color: var(--muted); }
   .back:hover { color: var(--accent); }
   .title { font-family: var(--serif); font-size: 2.1rem; font-weight: 600; letter-spacing: -0.015em; line-height: 1.25; margin-bottom: 8px; }
   .desc { font-size: 1.1rem; color: var(--muted); margin-bottom: 24px; }
@@ -208,7 +208,6 @@
     #detailPane { order: -1; padding: 20px 16px 0; }
     .selected-memory #listPane { display: none; }
     .selected-memory #detailPane { padding-bottom: 60px; }
-    .selected-memory .back { display: inline-block; }
     .md { padding: 20px; }
     .title { font-size: 1.7rem; }
   }
@@ -455,7 +454,7 @@ function renderAudit(token) {
   };
 
   $("detailPane").replaceChildren(el("div", { className: "audit-page" },
-    el("a", { className: "back", href: "#", textContent: "← All memories" }),
+    el("a", { className: "back", href: "#", textContent: "← Projects" }),
     el("h2", { className: "title", textContent: `Audit ${a.session.project}` }),
     el("div", { className: "audit-status" },
       badge("status" + (a.status === "done" ? " done" : ""), a.status),
@@ -514,7 +513,7 @@ function renderDetail(m) {
   const body = el("div", { className: "card md" });
   body.innerHTML = m.html;
   $("detailPane").replaceChildren(
-    el("a", { className: "back", href: "#", textContent: "← All memories" }),
+    el("a", { className: "back", href: "#", textContent: "← Projects" }),
     el("h2", { className: "title", textContent: m.name }),
     el("p", { className: "desc", textContent: m.description }),
     el("div", { className: "card meta" },
