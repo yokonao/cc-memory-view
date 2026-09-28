@@ -8,11 +8,11 @@ import (
 	"encoding/json"
 	"net"
 	"net/http"
-	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
 
+	"github.com/yokonao/cc-memory-view/internal/audit"
 	"github.com/yokonao/cc-memory-view/internal/memory"
 	"github.com/yuin/goldmark"
 )
@@ -23,9 +23,10 @@ var indexHTML []byte
 type Server struct {
 	Root       string
 	StaleAfter time.Duration
-	// StartAudit starts a Claude Code session auditing memory and returns
-	// its ID.
-	StartAudit func(context.Context) (string, error)
+	Audits     audit.Store
+	// StartAudit starts a Claude Code session auditing memory that reports
+	// to the audit token, and returns the session's ID.
+	StartAudit func(ctx context.Context, token string) (string, error)
 }
 
 func (s *Server) Handler() http.Handler {
@@ -35,7 +36,10 @@ func (s *Server) Handler() http.Handler {
 		_, _ = w.Write(indexHTML)
 	})
 	mux.HandleFunc("GET /api/data", s.data)
-	mux.HandleFunc("POST /api/audit", s.audit)
+	mux.HandleFunc("POST /api/audits", s.local(s.startAudit))
+	mux.HandleFunc("GET /api/audits", s.listAudits)
+	mux.HandleFunc("GET /api/audits/{token}", s.getAudit)
+	mux.HandleFunc("POST /api/audits/{token}/reply", s.local(s.reply))
 	return mux
 }
 
@@ -76,7 +80,7 @@ func (s *Server) data(w http.ResponseWriter, _ *http.Request) {
 	for _, p := range projects {
 		ids := map[string]string{}
 		for _, m := range p.Memories {
-			ids[m.Name] = s.id(m.File)
+			ids[m.Name] = s.memoryID(m.File)
 		}
 		for _, m := range p.Memories {
 			html, err := render(m.Body, ids)
@@ -85,7 +89,7 @@ func (s *Server) data(w http.ResponseWriter, _ *http.Request) {
 				return
 			}
 			out.Memories = append(out.Memories, memoryJSON{
-				ID:          s.id(m.File),
+				ID:          s.memoryID(m.File),
 				Project:     p.Name(),
 				File:        m.File,
 				Name:        m.Name,
@@ -102,22 +106,6 @@ func (s *Server) data(w http.ResponseWriter, _ *http.Request) {
 	_ = json.NewEncoder(w).Encode(out)
 }
 
-// audit accepts only same-origin requests from a page served on a local host
-// name, so other sites can't start sessions, even through DNS rebinding.
-func (s *Server) audit(w http.ResponseWriter, r *http.Request) {
-	if !localHost(r.Host) || r.Header.Get("Sec-Fetch-Site") != "same-origin" {
-		http.Error(w, "forbidden", http.StatusForbidden)
-		return
-	}
-	id, err := s.StartAudit(r.Context())
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]string{"id": id})
-}
-
 func localHost(hostport string) bool {
 	host, _, err := net.SplitHostPort(hostport)
 	if err != nil {
@@ -130,14 +118,6 @@ func localHost(hostport string) bool {
 }
 
 var memoryLinkRe = regexp.MustCompile(`\[\[[^\[\]]+\]\]`)
-
-func (s *Server) id(file string) string {
-	rel, err := filepath.Rel(s.Root, file)
-	if err != nil {
-		return file
-	}
-	return filepath.ToSlash(rel)
-}
 
 // render converts Markdown to HTML, turning [[name]] into links to the
 // memory's page when it exists. Raw HTML in the source is escaped.

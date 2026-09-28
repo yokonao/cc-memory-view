@@ -29,6 +29,7 @@ const usage = `Usage:
   cc-memory-view serve [flags]     browse memory in the browser
   cc-memory-view check [flags]     list audit candidates
   cc-memory-view setup             prepare the workspace audit sessions run in
+  cc-memory-view audit ...         used by the audit session to talk to the web UI
   cc-memory-view --version
 `
 
@@ -55,6 +56,8 @@ func main() {
 		err = check(args)
 	case "setup":
 		err = setup()
+	case "audit":
+		err = auditCmd(args)
 	default:
 		flag.Usage()
 		os.Exit(2)
@@ -109,8 +112,9 @@ func serve(args []string) error {
 	s := &web.Server{
 		Root:       filepath.Join(configDir, "projects"),
 		StaleAfter: days(*staleDays),
-		StartAudit: func(ctx context.Context) (string, error) {
-			return audit.Start(ctx, audit.Params{Dir: auditDir, ConfigDir: configDir, Exe: exe, StaleDays: *staleDays})
+		Audits:     audit.Store{Dir: filepath.Join(auditDir, "audits")},
+		StartAudit: func(ctx context.Context, token string) (string, error) {
+			return audit.Start(ctx, audit.Params{Dir: auditDir, ConfigDir: configDir, Exe: exe, StaleDays: *staleDays, Token: token})
 		},
 	}
 	srv := &http.Server{Handler: s.Handler()}
