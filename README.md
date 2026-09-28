@@ -48,13 +48,13 @@ Run `cc-memory-view check --json` and audit my memory with me.
 
 **Audit with Claude Code** in the web UI does this for you: it starts a
 `claude --bg` session with a fixed audit prompt. Claude posts its suggestions
-to the web UI, where you accept, reject or comment on each one and reply; the
+to the web UI, where you approve or comment on each one and reply; the
 session receives your replies through a `Monitor` and applies only what you
-accepted. You can also continue it in a terminal with `claude attach <id>`.
+approved. You can also continue it in a terminal with `claude attach <id>`.
 Only same-origin requests to a loopback or `*.localhost` host can start or
 reply to it.
 
-The session talks to the web UI through `cc-memory-view audit post` and
+The session talks to the web UI through `cc-memory-view audit update` and
 `audit watch`. It starts with those commands and `rm` allowed, `--permission-mode
 acceptEdits` and the Claude config directory added, so it runs without
 permission prompts.

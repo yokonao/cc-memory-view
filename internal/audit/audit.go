@@ -92,16 +92,16 @@ func Prompt(p Params) string {
 	cmd := func(args string) string { return "`" + p.Exe + " " + args + "`" }
 	return fmt.Sprintf(`Audit my Claude Code auto memory with me. I follow along and reply in the cc-memory-view web UI, which talks to you only through these pre-approved commands. Run each of them, and rm, as its own Bash call, never combined with other commands (no ;, &&, pipes or loops), or it will wait for a permission prompt nobody sees. Read memory files with the Read, Glob and Grep tools, not the shell.
 
-- %[1]s: publish your state to the web UI. Pass JSON on stdin (e.g. a quoted heredoc):
+- %[1]s: update the web UI. Pass JSON on stdin (e.g. a quoted heredoc):
   {"status": "working" | "waiting" | "done", "message": "Markdown for me", "suggestions": [{"id": "s1", "action": "keep" | "update" | "merge" | "promote" | "delete", "files": ["/absolute/path.md"], "reason": "Markdown", "proposed": "Markdown: the new content or the change", "status": "open" | "applied" | "dismissed"}]}
-  Each post replaces the previous state, so always send the full list, keeping IDs stable.
-- %[2]s: prints each reply from the web UI as one JSON line: {"message": "...", "decisions": [{"id": "s1", "decision": "accept" | "reject", "comment": "..."}]}. It exits once you post status "done".
+  Status and message replace the previous ones. Suggestions are merged by ID, field by field: send new ones in full, and only the changed fields of existing ones (e.g. {"id": "s1", "status": "applied"}). Suggestions you leave out are kept; dismiss one instead of dropping it.
+- %[2]s: prints each reply from the web UI as one JSON line: {"message": "...", "decisions": [{"id": "s1", "decision": "approve" | "comment", "comment": "..."}]}. "approve" may carry a comment to take into account; "comment" asks you to revise the suggestion, or dismiss it if the comment says so. It exits once you set status "done".
 
 Steps:
-1. Read every memory file under %[3]s with Glob and Read, and post your suggestions with status "waiting". Suggest promoting to %[4]s when the same rule appears in several projects.
-2. Start the Monitor tool with %[2]s as its command and the longest timeout it allows. Its events are my replies. Whenever it expires before you post status "done", start it again: it resumes where it left off, so no reply is repeated or lost.
-3. Don't change any file until a reply accepts it. On each reply, post status "working", apply the accepted suggestions (taking comments into account, and keeping each project's MEMORY.md in sync), then post the full list again with statuses updated and status "waiting", or "done" when I say we're finished.`,
-		cmd("audit post "+p.Token),
+1. Read every memory file under %[3]s with Glob and Read, and send your suggestions with status "waiting". Suggest promoting to %[4]s when the same rule appears in several projects.
+2. Start the Monitor tool with %[2]s as its command and the longest timeout it allows. Its events are my replies. Whenever it expires before you set status "done", start it again: it resumes where it left off, so no reply is repeated or lost.
+3. Don't change any file until a reply approves it. On each reply, set status "working", apply the approved suggestions (taking comments into account, and keeping each project's MEMORY.md in sync), then update the suggestions you applied or revised and set status "waiting", or "done" when I say we're finished.`,
+		cmd("audit update "+p.Token),
 		cmd("audit watch "+p.Token),
 		filepath.Join(p.ConfigDir, "projects", "*", "memory"),
 		filepath.Join(p.ConfigDir, "CLAUDE.md"))

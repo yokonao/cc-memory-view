@@ -13,8 +13,8 @@ import (
 )
 
 const auditUsage = `Usage (run by the audit session):
-  cc-memory-view audit post <token>    publish the state JSON on stdin
-  cc-memory-view audit watch <token>   print replies from the web UI
+  cc-memory-view audit update <token>   merge the state JSON on stdin
+  cc-memory-view audit watch <token>    print replies from the web UI
 `
 
 func auditStore() (audit.Store, error) {
@@ -36,11 +36,11 @@ func auditCmd(args []string) error {
 	}
 	token := args[1]
 	switch args[0] {
-	case "post":
-		if err := store.Post(token, os.Stdin); err != nil {
+	case "update":
+		if err := store.Update(token, os.Stdin); err != nil {
 			return err
 		}
-		fmt.Println("Posted to the web UI.")
+		fmt.Println("Updated the web UI.")
 		return nil
 	case "watch":
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)

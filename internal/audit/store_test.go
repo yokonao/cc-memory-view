@@ -3,6 +3,7 @@ package audit
 import (
 	"bytes"
 	"context"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -22,25 +23,24 @@ func newStore(t *testing.T) Store {
 	return s
 }
 
-func post(t *testing.T, s Store, state string) error {
+func update(t *testing.T, s Store, state string) error {
 	t.Helper()
-	return s.Post(token, strings.NewReader(state))
+	return s.Update(token, strings.NewReader(state))
 }
 
-func TestPostValidates(t *testing.T) {
+func TestUpdateValidates(t *testing.T) {
 	s := newStore(t)
 	for _, bad := range []string{
 		`{"status": "thinking"}`,
 		`{"status": "waiting", "suggestions": [{"id": "s1", "action": "burn", "files": []}]}`,
-		`{"status": "waiting", "suggestions": [{"id": "s1", "action": "keep"}, {"id": "s1", "action": "keep"}]}`,
 		`{"status": "waiting", "suggestions": [{"id": "s1", "action": "keep", "files": ["relative.md"]}]}`,
 		`{"status": "waiting", "extra": 1}`,
 	} {
-		if err := post(t, s, bad); err == nil {
+		if err := update(t, s, bad); err == nil {
 			t.Errorf("accepted %s", bad)
 		}
 	}
-	if err := post(t, s, `{"status": "waiting", "message": "hi", "suggestions": [{"id": "s1", "action": "delete", "files": ["/a.md"], "reason": "old"}]}`); err != nil {
+	if err := update(t, s, `{"status": "waiting", "message": "hi", "suggestions": [{"id": "s1", "action": "delete", "files": ["/a.md"], "reason": "old"}]}`); err != nil {
 		t.Fatal(err)
 	}
 	a, err := s.Load(token)
@@ -52,25 +52,56 @@ func TestPostValidates(t *testing.T) {
 	}
 }
 
+func TestUpdateMerges(t *testing.T) {
+	s := newStore(t)
+	if err := update(t, s, `{"status": "waiting", "suggestions": [{"id": "s1", "action": "delete", "files": ["/a.md"], "reason": "old"}, {"id": "s2", "action": "keep", "files": []}]}`); err != nil {
+		t.Fatal(err)
+	}
+	for _, up := range []string{
+		`{"status": "working", "suggestions": []}`,
+		`{"status": "waiting", "suggestions": [{"id": "s1", "status": "applied"}, {"id": "s3", "action": "keep", "files": []}]}`,
+	} {
+		if err := update(t, s, up); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := update(t, s, `{"status": "waiting", "suggestions": [{"id": "s4", "status": "open"}]}`); err == nil {
+		t.Error("accepted a new suggestion without an action")
+	}
+	a, err := s.Load(token)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, sg := range a.State.Suggestions {
+		got = append(got, sg.ID+" "+sg.Action+" "+sg.Reason+" "+sg.Status)
+	}
+	want := []string{"s1 delete old applied", "s2 keep  ", "s3 keep  "}
+	if !slices.Equal(got, want) {
+		t.Errorf("suggestions:\ngot  %q\nwant %q", got, want)
+	}
+}
+
 func TestReplyAndWatch(t *testing.T) {
 	s := newStore(t)
-	accept := Reply{Decisions: []Decision{{ID: "s1", Decision: "accept"}}}
-	if err := s.AddReply(token, accept); err == nil {
+	approve := Reply{Decisions: []Decision{{ID: "s1", Decision: "approve"}}}
+	if err := s.AddReply(token, approve); err == nil {
 		t.Error("accepted a reply before the session posted")
 	}
-	if err := post(t, s, `{"status": "waiting", "suggestions": [{"id": "s1", "action": "keep", "files": []}, {"id": "s2", "action": "keep", "files": [], "status": "applied"}]}`); err != nil {
+	if err := update(t, s, `{"status": "waiting", "suggestions": [{"id": "s1", "action": "keep", "files": []}, {"id": "s2", "action": "keep", "files": [], "status": "applied"}]}`); err != nil {
 		t.Fatal(err)
 	}
 	for _, bad := range []Reply{
 		{},
-		{Decisions: []Decision{{ID: "s2", Decision: "accept"}}},
-		{Decisions: []Decision{{ID: "s1", Decision: "maybe"}}},
+		{Decisions: []Decision{{ID: "s2", Decision: "approve"}}},
+		{Decisions: []Decision{{ID: "s1", Decision: "reject"}}},
+		{Decisions: []Decision{{ID: "s1", Decision: "comment", Comment: " "}}},
 	} {
 		if err := s.AddReply(token, bad); err == nil {
 			t.Errorf("accepted %+v", bad)
 		}
 	}
-	if err := s.AddReply(token, accept); err != nil {
+	if err := s.AddReply(token, approve); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.AddReply(token, Reply{Message: "and more"}); err != nil {
@@ -91,7 +122,7 @@ func TestReplyAndWatch(t *testing.T) {
 	if err := s.AddReply(token, Reply{Message: "third"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := post(t, s, `{"status": "done"}`); err != nil {
+	if err := update(t, s, `{"status": "done"}`); err != nil {
 		t.Fatal(err)
 	}
 	out.Reset()
@@ -106,8 +137,8 @@ func TestReplyAndWatch(t *testing.T) {
 func TestInvalidToken(t *testing.T) {
 	s := Store{Dir: t.TempDir()}
 	for _, tok := range []string{"../x", "ABC", "aaaabbbbccccdddd"} {
-		if err := s.Post(tok, strings.NewReader(`{"status": "done"}`)); err == nil {
-			t.Errorf("posted to %q", tok)
+		if err := s.Update(tok, strings.NewReader(`{"status": "done"}`)); err == nil {
+			t.Errorf("updated %q", tok)
 		}
 	}
 }
