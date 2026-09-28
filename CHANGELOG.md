@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v0.0.1 - 2026-09-28
+
 ### Added
 
 - `serve` browses memory across projects in the browser, styled after Claude.
