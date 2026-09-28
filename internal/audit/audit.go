@@ -93,7 +93,7 @@ func Prompt(p Params) string {
 	cmd := func(args string) string { return "`" + p.Exe + " " + args + "`" }
 	return fmt.Sprintf(`Audit my Claude Code auto memory with me. I follow along and reply in the cc-memory-view web UI, which talks to you only through these pre-approved commands. Run each of them as its own Bash call, never combined with other commands (no ;, &&, pipes or loops), or it will wait for a permission prompt nobody sees. Read memory files with the Read, Glob and Grep tools, not the shell.
 
-- %[1]s: rule-based candidates (orphaned projects, MEMORY.md inconsistencies, broken [[links]], missing paths, stale memories).
+- %[1]s: rule-based candidates (orphaned projects, MEMORY.md inconsistencies, broken [[links]], stale memories).
 - %[2]s: publish your state to the web UI. Pass JSON on stdin (e.g. a quoted heredoc):
   {"status": "working" | "waiting" | "done", "message": "Markdown for me", "suggestions": [{"id": "s1", "action": "keep" | "update" | "merge" | "promote" | "delete", "files": ["/absolute/path.md"], "reason": "Markdown", "proposed": "Markdown: the new content or the change", "status": "open" | "applied" | "dismissed"}]}
   Each post replaces the previous state, so always send the full list, keeping IDs stable.
