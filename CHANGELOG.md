@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.0.5 - 2026-10-15
+
+### Added
+
+- `check` reports `index_too_large` when `MEMORY.md` is over the 200 lines or 25KB Claude Code loads.
+- `check` reports `hidden_chars` for invisible characters and tags imitating Claude Code's markup, such as `<system-reminder>`, which Claude Code neutralizes when it loads memory.
+
+### Changed
+
+- Memory is read from the directory `autoMemoryDirectory` chooses in managed, project, local or user settings.
+
 ## v0.0.4 - 2026-10-02
 
 ### Changed
