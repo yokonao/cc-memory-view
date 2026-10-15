@@ -1,112 +1,51 @@
 package web
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
-
-	"github.com/yokonao/cc-memory-view/internal/audit"
 )
 
-func newServer(t *testing.T) (*Server, *int) {
-	t.Helper()
-	started := 0
-	return &Server{
-		Root:   "/cfg/projects",
-		Audits: audit.Store{Dir: t.TempDir()},
-		StartAudit: func(context.Context, string, string) (string, error) {
-			started++
-			return "0ebad0f0", nil
-		},
-	}, &started
-}
-
-func do(h http.Handler, method, path, host, fetchSite, body string) *httptest.ResponseRecorder {
-	req := httptest.NewRequest(method, path, strings.NewReader(body))
-	req.Host = host
-	if fetchSite != "" {
-		req.Header.Set("Sec-Fetch-Site", fetchSite)
-	}
-	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, req)
-	return rec
-}
-
-func TestStartAuditGuard(t *testing.T) {
-	s, started := newServer(t)
-	h := s.Handler()
-	for _, tc := range []struct {
-		host, fetchSite string
-		want            int
-	}{
-		{"127.0.0.1:8080", "same-origin", http.StatusOK},
-		{"[::1]:8080", "same-origin", http.StatusOK},
-		{"localhost", "same-origin", http.StatusOK},
-		{"memory.localhost:3000", "same-origin", http.StatusOK},
-		{"127.0.0.1:8080", "cross-site", http.StatusForbidden},
-		{"127.0.0.1:8080", "", http.StatusForbidden},
-		{"evil.example:8080", "same-origin", http.StatusForbidden},
-		{"localhost.evil.example", "same-origin", http.StatusForbidden},
-	} {
-		rec := do(h, http.MethodPost, "/api/audits", tc.host, tc.fetchSite, `{"project": "~/p"}`)
-		if rec.Code != tc.want {
-			t.Errorf("host %q, Sec-Fetch-Site %q: status %d, want %d", tc.host, tc.fetchSite, rec.Code, tc.want)
-		}
-	}
-	if *started != 4 {
-		t.Errorf("started %d sessions, want 4", *started)
-	}
-}
-
-func TestAuditFlow(t *testing.T) {
-	s, _ := newServer(t)
-	h := s.Handler()
-
-	if rec := do(h, http.MethodPost, "/api/audits", "localhost", "same-origin", `{}`); rec.Code != http.StatusBadRequest {
-		t.Errorf("start without a project: %d", rec.Code)
-	}
-	rec := do(h, http.MethodPost, "/api/audits", "localhost", "same-origin", `{"project": "~/p"}`)
-	var started struct{ Token, ID string }
-	if err := json.NewDecoder(rec.Body).Decode(&started); err != nil || started.ID != "0ebad0f0" {
-		t.Fatalf("start: %v %+v", err, started)
-	}
-	path := "/api/audits/" + started.Token
-
-	if rec := do(h, http.MethodGet, "/api/audits", "localhost", "", ""); !strings.Contains(rec.Body.String(), `"session":{"token":"`+started.Token) || !strings.Contains(rec.Body.String(), `"project":"~/p"`) || !strings.Contains(rec.Body.String(), `"status":"starting"`) {
-		t.Errorf("list: %s", rec.Body)
-	}
-	if rec := do(h, http.MethodPost, path+"/reply", "localhost", "same-origin", `{"message": "hi"}`); rec.Code != http.StatusConflict {
-		t.Errorf("reply before the session posted: %d", rec.Code)
-	}
-
-	state := `{"status": "waiting", "message": "**Hello**", "suggestions": [{"id": "s1", "action": "delete", "files": ["/cfg/projects/-p/memory/a.md", "/elsewhere.md"], "reason": "old"}]}`
-	if err := s.Audits.Update(started.Token, strings.NewReader(state)); err != nil {
+func TestData(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	root := t.TempDir()
+	mem := filepath.Join(root, "-p", "memory")
+	if err := os.MkdirAll(mem, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	rec = do(h, http.MethodGet, path, "localhost", "", "")
-	var got auditJSON
+	for name, content := range map[string]string{
+		"MEMORY.md": "- [A](a.md)\n",
+		"a.md":      "---\nname: a\n---\nSee [[b]] and [[nope]]. <script>x</script>\n",
+		"b.md":      "---\nname: b\n---\nb\n",
+	} {
+		if err := os.WriteFile(filepath.Join(mem, name), []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	rec := httptest.NewRecorder()
+	(&Server{Root: root}).Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/data", nil))
+	var got dataJSON
 	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
 		t.Fatal(err)
 	}
-	if got.Status != "waiting" || !strings.Contains(got.MessageHTML, "<strong>Hello</strong>") ||
-		len(got.Suggestions) != 1 || !got.Suggestions[0].Open ||
-		got.Suggestions[0].MemoryIDs[0] != "-p/memory/a.md" || got.Suggestions[0].MemoryIDs[1] != "" {
-		t.Errorf("audit: %+v", got)
+	if len(got.Memories) != 2 {
+		t.Fatalf("got %d memories, want 2", len(got.Memories))
 	}
-
-	if rec := do(h, http.MethodPost, path+"/reply", "localhost", "cross-site", `{"message": "hi"}`); rec.Code != http.StatusForbidden {
-		t.Errorf("cross-site reply: %d", rec.Code)
+	a := got.Memories[0]
+	if a.ID != "-p/memory/a.md" {
+		t.Errorf("id: %q", a.ID)
 	}
-	if rec := do(h, http.MethodPost, path+"/reply", "localhost", "same-origin", `{"decisions": [{"id": "s1", "decision": "approve"}]}`); rec.Code != http.StatusNoContent {
-		t.Errorf("reply: %d %s", rec.Code, rec.Body)
+	for _, want := range []string{`<a href="#-p/memory/b.md">b</a>`, "[[nope]]"} {
+		if !strings.Contains(a.HTML, want) {
+			t.Errorf("html %q lacks %q", a.HTML, want)
+		}
 	}
-	if rec := do(h, http.MethodGet, path, "localhost", "", ""); !strings.Contains(rec.Body.String(), `"decision":"approve"`) {
-		t.Errorf("reply not recorded: %s", rec.Body)
-	}
-	if rec := do(h, http.MethodGet, "/api/audits/0000000000000000", "localhost", "", ""); rec.Code != http.StatusNotFound {
-		t.Errorf("unknown audit: %d", rec.Code)
+	if strings.Contains(a.HTML, "<script>") {
+		t.Errorf("raw HTML not escaped: %q", a.HTML)
 	}
 }

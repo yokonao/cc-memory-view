@@ -11,7 +11,6 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -29,9 +28,6 @@ type Project struct {
 	// unknown.
 	Path     string
 	Memories []*Memory
-	// Index holds the file names MEMORY.md links to, or nil without MEMORY.md.
-	Index []string
-	index string
 }
 
 // Name is Path with the home directory shortened to ~, or else the directory
@@ -63,7 +59,6 @@ type Memory struct {
 	Type        string
 	Modified    time.Time
 	Body        string
-	data        string
 }
 
 // ConfigDir returns Claude Code's configuration directory: $CLAUDE_CONFIG_DIR
@@ -148,7 +143,7 @@ func loadProject(p *Project) error {
 		return err
 	}
 	for _, e := range entries {
-		if e.IsDir() || filepath.Ext(e.Name()) != ".md" {
+		if e.IsDir() || filepath.Ext(e.Name()) != ".md" || e.Name() == indexFile {
 			continue
 		}
 		file := filepath.Join(memDir, e.Name())
@@ -156,34 +151,16 @@ func loadProject(p *Project) error {
 		if err != nil {
 			return err
 		}
-		if e.Name() == indexFile {
-			p.index = string(data)
-			p.Index = parseIndex(p.index)
-			if p.Index == nil {
-				p.Index = []string{}
-			}
-			continue
-		}
 		info, err := e.Info()
 		if err != nil {
 			return err
 		}
 		p.Memories = append(p.Memories, parseMemory(file, string(data), info.ModTime()))
 	}
-	if p.Index == nil && p.Memories == nil {
+	if p.Memories == nil {
 		return fs.ErrNotExist
 	}
 	return nil
-}
-
-var indexLinkRe = regexp.MustCompile(`\]\(([^)]+\.md)\)`)
-
-func parseIndex(s string) []string {
-	var files []string
-	for _, m := range indexLinkRe.FindAllStringSubmatch(s, -1) {
-		files = append(files, m[1])
-	}
-	return files
 }
 
 func parseMemory(file, data string, mtime time.Time) *Memory {
@@ -195,7 +172,6 @@ func parseMemory(file, data string, mtime time.Time) *Memory {
 		Type:        fm["metadata.type"],
 		Modified:    mtime,
 		Body:        body,
-		data:        data,
 	}
 	if m.Name == "" {
 		m.Name = strings.TrimSuffix(filepath.Base(file), ".md")
