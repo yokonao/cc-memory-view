@@ -1,8 +1,8 @@
 # cc-memory-view
 
 Browse and audit [Claude Code](https://claude.com/claude-code)'s auto memory
-(`~/.claude/projects/*/memory/`) across projects. Read-only: it never
-modifies memory files.
+(`~/.claude/projects/*/memory/`, or the directory `autoMemoryDirectory`
+chooses) across projects. Read-only: it never modifies memory files.
 
 ## Install
 
@@ -33,14 +33,16 @@ cc-memory-view check [--json] [--stale-days N]
 
 Lists audit candidates, found by rules without judging content:
 
-| kind             | meaning                                                          |
-| ---------------- | ---------------------------------------------------------------- |
-| `orphan_project` | the project's directory no longer exists                         |
-| `no_index`       | the memory directory has no `MEMORY.md`                          |
-| `index_missing`  | `MEMORY.md` links to a file that doesn't exist                   |
-| `unindexed`      | a memory file isn't listed in `MEMORY.md`                        |
-| `broken_link`    | a `[[name]]` link matches no memory in the project               |
-| `stale`          | not modified for `--stale-days` days (default 90)                |
+| kind              | meaning                                                                                     |
+| ----------------- | ------------------------------------------------------------------------------------------- |
+| `orphan_project`  | the project's directory no longer exists                                                    |
+| `no_index`        | the memory directory has no `MEMORY.md`                                                     |
+| `index_missing`   | `MEMORY.md` links to a file that doesn't exist                                              |
+| `unindexed`       | a memory file isn't listed in `MEMORY.md`                                                   |
+| `index_too_large` | `MEMORY.md` is over the 200 lines or 25KB Claude Code loads, so the rest is dropped         |
+| `broken_link`     | a `[[name]]` link matches no memory in the project                                          |
+| `stale`           | not modified for `--stale-days` days (default 90)                                           |
+| `hidden_chars`    | invisible characters, or tags such as `<system-reminder>` that imitate Claude Code's markup |
 
 Deciding what to keep, merge, move or delete is left to Claude Code.
 
@@ -66,6 +68,12 @@ accepted the trust prompt there.
 
 The project directory is taken from the `cwd` recorded in its session logs.
 `$CLAUDE_CONFIG_DIR` is honored in place of `~/.claude`.
+
+A project's memory directory is the `autoMemoryDirectory` of the first
+settings that set it: managed (`managed-settings.json` and
+`managed-settings.d/`), the project's `.claude/settings.local.json` (at the
+repository root) and `.claude/settings.json`, then `<config>/settings.json`.
+A directory chosen by managed or user settings is shared by every project.
 
 ## Development
 

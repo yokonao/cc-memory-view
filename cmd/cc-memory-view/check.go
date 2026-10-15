@@ -51,7 +51,7 @@ func printIssues(w io.Writer, issues []memory.Issue) error {
 	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
 	for _, i := range issues {
 		file := filepath.Base(i.File)
-		if file == "memory" {
+		if filepath.Ext(file) != ".md" {
 			file = "-"
 		}
 		_, _ = fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", i.Kind, i.Project, file, i.Detail)
