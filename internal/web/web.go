@@ -3,16 +3,14 @@ package web
 
 import (
 	"bytes"
-	"context"
 	_ "embed"
 	"encoding/json"
-	"net"
 	"net/http"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
 
-	"github.com/yokonao/cc-memory-view/internal/audit"
 	"github.com/yokonao/cc-memory-view/internal/memory"
 	"github.com/yuin/goldmark"
 )
@@ -21,12 +19,7 @@ import (
 var indexHTML []byte
 
 type Server struct {
-	Root       string
-	StaleAfter time.Duration
-	Audits     audit.Store
-	// StartAudit starts a Claude Code session auditing a project's memory
-	// that reports to the audit token, and returns the session's ID.
-	StartAudit func(ctx context.Context, token, project string) (string, error)
+	Root string
 }
 
 func (s *Server) Handler() http.Handler {
@@ -36,29 +29,23 @@ func (s *Server) Handler() http.Handler {
 		_, _ = w.Write(indexHTML)
 	})
 	mux.HandleFunc("GET /api/data", s.data)
-	mux.HandleFunc("POST /api/audits", s.local(s.startAudit))
-	mux.HandleFunc("GET /api/audits", s.listAudits)
-	mux.HandleFunc("GET /api/audits/{token}", s.getAudit)
-	mux.HandleFunc("POST /api/audits/{token}/reply", s.local(s.reply))
 	return mux
 }
 
 type memoryJSON struct {
-	ID          string         `json:"id"`
-	Project     string         `json:"project"`
-	File        string         `json:"file"`
-	Name        string         `json:"name"`
-	Description string         `json:"description"`
-	Type        string         `json:"type"`
-	Modified    time.Time      `json:"modified"`
-	Body        string         `json:"body"`
-	HTML        string         `json:"html"`
-	Issues      []memory.Issue `json:"issues"`
+	ID          string    `json:"id"`
+	Project     string    `json:"project"`
+	File        string    `json:"file"`
+	Name        string    `json:"name"`
+	Description string    `json:"description"`
+	Type        string    `json:"type"`
+	Modified    time.Time `json:"modified"`
+	Body        string    `json:"body"`
+	HTML        string    `json:"html"`
 }
 
 type dataJSON struct {
-	Memories []memoryJSON   `json:"memories"`
-	Issues   []memory.Issue `json:"issues"`
+	Memories []memoryJSON `json:"memories"`
 }
 
 func (s *Server) data(w http.ResponseWriter, _ *http.Request) {
@@ -67,16 +54,7 @@ func (s *Server) data(w http.ResponseWriter, _ *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	issues := memory.Check(projects, time.Now(), s.StaleAfter)
-	byFile := map[string][]memory.Issue{}
-	for _, is := range issues {
-		byFile[is.File] = append(byFile[is.File], is)
-	}
-
-	out := dataJSON{Memories: []memoryJSON{}, Issues: issues}
-	if out.Issues == nil {
-		out.Issues = []memory.Issue{}
-	}
+	out := dataJSON{Memories: []memoryJSON{}}
 	for _, p := range projects {
 		ids := map[string]string{}
 		for _, m := range p.Memories {
@@ -98,7 +76,6 @@ func (s *Server) data(w http.ResponseWriter, _ *http.Request) {
 				Modified:    m.Modified,
 				Body:        m.Body,
 				HTML:        html,
-				Issues:      byFile[m.File],
 			})
 		}
 	}
@@ -106,15 +83,14 @@ func (s *Server) data(w http.ResponseWriter, _ *http.Request) {
 	_ = json.NewEncoder(w).Encode(out)
 }
 
-func localHost(hostport string) bool {
-	host, _, err := net.SplitHostPort(hostport)
-	if err != nil {
-		host = hostport
+// memoryID returns the UI's ID for a memory file, or "" for files outside
+// the projects directory.
+func (s *Server) memoryID(file string) string {
+	rel, err := filepath.Rel(s.Root, file)
+	if err != nil || strings.HasPrefix(rel, "..") {
+		return ""
 	}
-	if ip := net.ParseIP(host); ip != nil {
-		return ip.IsLoopback()
-	}
-	return host == "localhost" || strings.HasSuffix(host, ".localhost")
+	return filepath.ToSlash(rel)
 }
 
 var memoryLinkRe = regexp.MustCompile(`\[\[[^\[\]]+\]\]`)

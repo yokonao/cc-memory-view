@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Removed
+
+- Auditing memory with Claude Code from the web UI, and the `audit` commands it used.
+- `check` and the issues the web UI showed; its rules rarely found anything Claude Code doesn't already keep in order. `serve` no longer takes `--stale-days`.
+
 ## v0.0.5 - 2026-10-15
 
 ### Added

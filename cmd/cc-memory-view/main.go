@@ -5,7 +5,6 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	"github.com/spf13/cobra"
 )
@@ -16,13 +15,13 @@ var version = "dev"
 func main() {
 	root := &cobra.Command{
 		Use:               "cc-memory-view",
-		Short:             "Browse and audit Claude Code's auto memory",
+		Short:             "Browse Claude Code's auto memory",
 		Version:           version,
 		SilenceUsage:      true,
 		CompletionOptions: cobra.CompletionOptions{DisableDefaultCmd: true},
 	}
 	root.SetVersionTemplate("{{.Version}}\n")
-	root.AddCommand(serveCmd(), checkCmd(), auditCmd())
+	root.AddCommand(serveCmd())
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -30,12 +29,4 @@ func main() {
 		stop()
 		os.Exit(1)
 	}
-}
-
-func staleDaysFlag(cmd *cobra.Command) *int {
-	return cmd.Flags().Int("stale-days", 90, "report memories not modified for this many days")
-}
-
-func days(n int) time.Duration {
-	return time.Duration(n) * 24 * time.Hour
 }
