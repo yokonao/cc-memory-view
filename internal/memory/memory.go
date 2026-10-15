@@ -1,9 +1,11 @@
-// Package memory loads Claude Code's auto memory from ~/.claude/projects/*/memory/.
+// Package memory loads Claude Code's auto memory from ~/.claude/projects/*/memory/
+// or the directories autoMemoryDirectory chooses.
 package memory
 
 import (
 	"bufio"
 	"bytes"
+	"cmp"
 	"encoding/json"
 	"errors"
 	"io/fs"
@@ -18,28 +20,40 @@ import (
 const indexFile = "MEMORY.md"
 
 type Project struct {
-	// Dir is the project's directory under ~/.claude/projects.
+	// Dir is the project's directory under ~/.claude/projects, or "" for a
+	// memory directory several projects share.
 	Dir string
+	// MemoryDir holds the memory files: Dir/memory or autoMemoryDirectory.
+	MemoryDir string
 	// Path is the working directory the project was created for, or "" when
-	// no session log records it.
+	// unknown.
 	Path     string
 	Memories []*Memory
 	// Index holds the file names MEMORY.md links to, or nil without MEMORY.md.
 	Index []string
+	index string
 }
 
-// Name is Path with the home directory shortened to ~, or the directory name
-// when Path is unknown.
+// Name is Path with the home directory shortened to ~, or else the directory
+// name of Dir, or else MemoryDir.
 func (p *Project) Name() string {
-	if p.Path == "" {
+	switch {
+	case p.Path != "":
+		return shortenHome(p.Path)
+	case p.Dir != "":
 		return filepath.Base(p.Dir)
+	default:
+		return shortenHome(p.MemoryDir)
 	}
+}
+
+func shortenHome(path string) string {
 	if home, err := os.UserHomeDir(); err == nil {
-		if rel, err := filepath.Rel(home, p.Path); err == nil && !strings.HasPrefix(rel, "..") {
+		if rel, err := filepath.Rel(home, path); err == nil && !strings.HasPrefix(rel, "..") {
 			return filepath.Join("~", rel)
 		}
 	}
-	return p.Path
+	return path
 }
 
 type Memory struct {
@@ -49,6 +63,7 @@ type Memory struct {
 	Type        string
 	Modified    time.Time
 	Body        string
+	data        string
 }
 
 // ConfigDir returns Claude Code's configuration directory: $CLAUDE_CONFIG_DIR
@@ -73,19 +88,42 @@ func Root() (string, error) {
 	return filepath.Join(dir, "projects"), nil
 }
 
-// Load reads every project under root that has a memory directory.
+// Load reads the memory directory of every project under root, which is
+// <config>/projects. A project's memory directory is the autoMemoryDirectory
+// of its managed, local, shared project or user (<config>/settings.json)
+// settings, in that order, or else <root>/<project>/memory. A directory the
+// managed or user settings choose is loaded even when no project uses it.
 func Load(root string) ([]*Project, error) {
 	entries, err := os.ReadDir(root)
 	if err != nil {
 		return nil, err
 	}
-	var projects []*Project
+	home, _ := os.UserHomeDir()
+	managed := managedMemoryDir(home)
+	user := settingsMemoryDir(filepath.Join(filepath.Dir(root), "settings.json"), home)
+
+	type member struct{ dir, cwd string }
+	byMemDir := map[string][]member{}
+	if global := cmp.Or(managed, user); global != "" {
+		byMemDir[global] = nil
+	}
 	for _, e := range entries {
 		if !e.IsDir() {
 			continue
 		}
 		dir := filepath.Join(root, e.Name())
-		p, err := loadProject(dir)
+		cwd := sessionCwd(dir)
+		memDir := cmp.Or(managed, projectMemoryDir(cwd, home), user, filepath.Join(dir, "memory"))
+		byMemDir[memDir] = append(byMemDir[memDir], member{dir, cwd})
+	}
+
+	var projects []*Project
+	for memDir, members := range byMemDir {
+		p := &Project{MemoryDir: memDir}
+		if len(members) == 1 {
+			p.Dir, p.Path = members[0].dir, members[0].cwd
+		}
+		err := loadProject(p)
 		if errors.Is(err, fs.ErrNotExist) {
 			continue
 		}
@@ -94,17 +132,21 @@ func Load(root string) ([]*Project, error) {
 		}
 		projects = append(projects, p)
 	}
-	sort.Slice(projects, func(i, j int) bool { return projects[i].Name() < projects[j].Name() })
+	sort.Slice(projects, func(i, j int) bool {
+		if a, b := projects[i].Name(), projects[j].Name(); a != b {
+			return a < b
+		}
+		return projects[i].MemoryDir < projects[j].MemoryDir
+	})
 	return projects, nil
 }
 
-func loadProject(dir string) (*Project, error) {
-	memDir := filepath.Join(dir, "memory")
+func loadProject(p *Project) error {
+	memDir := p.MemoryDir
 	entries, err := os.ReadDir(memDir)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	p := &Project{Dir: dir, Path: sessionCwd(dir)}
 	for _, e := range entries {
 		if e.IsDir() || filepath.Ext(e.Name()) != ".md" {
 			continue
@@ -112,10 +154,11 @@ func loadProject(dir string) (*Project, error) {
 		file := filepath.Join(memDir, e.Name())
 		data, err := os.ReadFile(file)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		if e.Name() == indexFile {
-			p.Index = parseIndex(string(data))
+			p.index = string(data)
+			p.Index = parseIndex(p.index)
 			if p.Index == nil {
 				p.Index = []string{}
 			}
@@ -123,14 +166,14 @@ func loadProject(dir string) (*Project, error) {
 		}
 		info, err := e.Info()
 		if err != nil {
-			return nil, err
+			return err
 		}
 		p.Memories = append(p.Memories, parseMemory(file, string(data), info.ModTime()))
 	}
 	if p.Index == nil && p.Memories == nil {
-		return nil, fs.ErrNotExist
+		return fs.ErrNotExist
 	}
-	return p, nil
+	return nil
 }
 
 var indexLinkRe = regexp.MustCompile(`\]\(([^)]+\.md)\)`)
@@ -152,6 +195,7 @@ func parseMemory(file, data string, mtime time.Time) *Memory {
 		Type:        fm["metadata.type"],
 		Modified:    mtime,
 		Body:        body,
+		data:        data,
 	}
 	if m.Name == "" {
 		m.Name = strings.TrimSuffix(filepath.Base(file), ".md")
