@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.0.7 - 2026-10-23
+
+### Security
+
+- Built with Go 1.27.3, whose `crypto/x509` distrusts the compromised eMudhra intermediate CAs.
+
 ## v0.0.6 - 2026-10-16
 
 ### Removed
