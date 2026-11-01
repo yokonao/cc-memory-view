@@ -10,6 +10,7 @@ import (
 	"runtime"
 
 	"github.com/spf13/cobra"
+
 	"github.com/yokonao/cc-memory-view/internal/memory"
 	"github.com/yokonao/cc-memory-view/internal/web"
 )
