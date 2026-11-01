@@ -11,8 +11,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/yokonao/cc-memory-view/internal/memory"
 	"github.com/yuin/goldmark"
+
+	"github.com/yokonao/cc-memory-view/internal/memory"
 )
 
 //go:embed index.html
