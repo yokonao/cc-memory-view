@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.0.8 - 2026-11-13
+
+### Fixed
+
+- Paths under home whose first name starts with `..`, such as `~/..foo`, are shown as `~/...`.
+- Memory files under the projects directory whose path starts with `..`, such as `..notes.md`, are no longer treated as outside it.
+
 ## v0.0.7 - 2026-10-23
 
 ### Security
