@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"path/filepath"
 	"regexp"
-	"strings"
 	"time"
 
 	"github.com/yuin/goldmark"
@@ -88,7 +87,7 @@ func (s *Server) data(w http.ResponseWriter, _ *http.Request) {
 // the projects directory.
 func (s *Server) memoryID(file string) string {
 	rel, err := filepath.Rel(s.Root, file)
-	if err != nil || strings.HasPrefix(rel, "..") {
+	if err != nil || !filepath.IsLocal(rel) {
 		return ""
 	}
 	return filepath.ToSlash(rel)
