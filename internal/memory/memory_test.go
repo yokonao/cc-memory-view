@@ -189,7 +189,7 @@ func TestLoadMemoryDirectory(t *testing.T) {
 			got := map[string]string{}
 			for _, p := range projects {
 				name := p.Name()
-				if rel, err := filepath.Rel(tmp, name); err == nil && !strings.HasPrefix(rel, "..") {
+				if rel, err := filepath.Rel(tmp, name); err == nil && filepath.IsLocal(rel) {
 					name = rel
 				}
 				mem, _ := filepath.Rel(tmp, p.MemoryDir)
@@ -217,6 +217,25 @@ func TestExpandMemoryDir(t *testing.T) {
 	for _, tt := range tests {
 		if got := expandMemoryDir(tt.value, tt.home); got != tt.want {
 			t.Errorf("expandMemoryDir(%q, %q) = %q, want %q", tt.value, tt.home, got, tt.want)
+		}
+	}
+}
+
+func TestShortenHome(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	for _, tt := range []struct {
+		path, want string
+	}{
+		{home, "~"},
+		{filepath.Join(home, "src"), filepath.Join("~", "src")},
+		{filepath.Join(home, "..foo"), filepath.Join("~", "..foo")},
+		{filepath.Join(home, "..foo", "bar"), filepath.Join("~", "..foo", "bar")},
+		{filepath.Dir(home), filepath.Dir(home)},
+		{filepath.Join(filepath.Dir(home), "other"), filepath.Join(filepath.Dir(home), "other")},
+	} {
+		if got := shortenHome(tt.path); got != tt.want {
+			t.Errorf("shortenHome(%q) = %q, want %q", tt.path, got, tt.want)
 		}
 	}
 }

@@ -49,3 +49,22 @@ func TestData(t *testing.T) {
 		t.Errorf("raw HTML not escaped: %q", a.HTML)
 	}
 }
+
+func TestMemoryID(t *testing.T) {
+	root := t.TempDir()
+	s := &Server{Root: root}
+	for _, tt := range []struct {
+		file, want string
+	}{
+		{filepath.Join(root, "-p", "memory", "a.md"), "-p/memory/a.md"},
+		{filepath.Join(root, "..notes.md"), "..notes.md"},
+		{filepath.Join(root, "..p", "memory", "a.md"), "..p/memory/a.md"},
+		{root, "."},
+		{filepath.Dir(root), ""},
+		{filepath.Join(filepath.Dir(root), "a.md"), ""},
+	} {
+		if got := s.memoryID(tt.file); got != tt.want {
+			t.Errorf("memoryID(%q) = %q, want %q", tt.file, got, tt.want)
+		}
+	}
+}

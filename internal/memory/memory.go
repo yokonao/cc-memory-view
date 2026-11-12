@@ -45,7 +45,7 @@ func (p *Project) Name() string {
 
 func shortenHome(path string) string {
 	if home, err := os.UserHomeDir(); err == nil {
-		if rel, err := filepath.Rel(home, path); err == nil && !strings.HasPrefix(rel, "..") {
+		if rel, err := filepath.Rel(home, path); err == nil && filepath.IsLocal(rel) {
 			return filepath.Join("~", rel)
 		}
 	}
