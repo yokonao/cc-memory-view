@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -237,5 +238,67 @@ func TestShortenHome(t *testing.T) {
 		if got := shortenHome(tt.path); got != tt.want {
 			t.Errorf("shortenHome(%q) = %q, want %q", tt.path, got, tt.want)
 		}
+	}
+}
+
+func TestLoadSkipsUnreadableFiles(t *testing.T) {
+	tests := []struct {
+		name string
+		make func(t *testing.T, path string)
+	}{
+		{"dangling symlink", func(t *testing.T, path string) {
+			if err := os.Symlink(filepath.Join(filepath.Dir(path), "missing"), path); err != nil {
+				t.Fatal(err)
+			}
+		}},
+		{"no permission", func(t *testing.T, path string) {
+			if os.Geteuid() == 0 {
+				t.Skip("root reads files without permission")
+			}
+			write(t, path, "secret\n")
+			if err := os.Chmod(path, 0); err != nil {
+				t.Fatal(err)
+			}
+		}},
+		{"named pipe", func(t *testing.T, path string) {
+			if err := syscall.Mkfifo(path, 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			isolate(t)
+			root := t.TempDir()
+			mem := filepath.Join(root, "-work", "memory")
+			write(t, filepath.Join(mem, "a.md"), "---\nname: a\n---\nbody\n")
+			tt.make(t, filepath.Join(mem, "x.md"))
+			write(t, filepath.Join(root, "-other", "memory", "b.md"), "---\nname: b\n---\nbody\n")
+
+			done := make(chan struct{})
+			var projects []*Project
+			var err error
+			go func() {
+				defer close(done)
+				projects, err = Load(root)
+			}()
+			select {
+			case <-done:
+			case <-time.After(5 * time.Second):
+				t.Fatal("Load hung")
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			var names []string
+			for _, p := range projects {
+				for _, m := range p.Memories {
+					names = append(names, m.Name)
+				}
+			}
+			if got := strings.Join(names, ","); got != "b,a" && got != "a,b" {
+				t.Errorf("got memories %q, want a and b", got)
+			}
+		})
 	}
 }
