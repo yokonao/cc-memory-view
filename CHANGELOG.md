@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.0.9 - 2026-11-17
+
+### Fixed
+
+- A memory file that can't be read, such as a dangling symlink or one without read permission, is skipped and reported on stderr instead of hiding its project or every project.
+- Memory files that aren't regular files, such as named pipes, are skipped instead of hanging.
+
 ## v0.0.8 - 2026-11-13
 
 ### Fixed

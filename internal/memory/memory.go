@@ -8,6 +8,7 @@ import (
 	"cmp"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -147,13 +148,19 @@ func loadProject(p *Project) error {
 			continue
 		}
 		file := filepath.Join(memDir, e.Name())
+		info, err := os.Stat(file)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "skip memory:", err)
+			continue
+		}
+		// Named pipes block ReadFile until a writer opens them.
+		if !info.Mode().IsRegular() {
+			continue
+		}
 		data, err := os.ReadFile(file)
 		if err != nil {
-			return err
-		}
-		info, err := e.Info()
-		if err != nil {
-			return err
+			fmt.Fprintln(os.Stderr, "skip memory:", err)
+			continue
 		}
 		p.Memories = append(p.Memories, parseMemory(file, string(data), info.ModTime()))
 	}
